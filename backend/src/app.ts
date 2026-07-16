@@ -23,6 +23,14 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { pinRouter } from "./modules/pin/pin.routes";
 import { intelHubRouter } from "./modules/intelHub/intelHub.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
+// Enterprise modules
+import { rolesRouter } from "./modules/roles/roles.routes";
+import { departmentsRouter } from "./modules/departments/departments.routes";
+import { branchesRouter } from "./modules/branches/branches.routes";
+import { notificationsRouter } from "./modules/notifications/notifications.routes";
+import { companyRouter } from "./modules/company/company.routes";
+import { sessionsRouter } from "./modules/sessions/sessions.routes";
+
 
 export function createApp(): Express {
   const app = express();
@@ -59,6 +67,13 @@ export function createApp(): Express {
   app.use("/api/pin", pinRouter);
   app.use("/api/intel-hub", intelHubRouter);
   app.use("/api/portal", portalRouter); // uses portalAuthMiddleware internally, not the internal one
+  // Enterprise routes
+  app.use("/api/roles", rolesRouter);
+  app.use("/api/departments", departmentsRouter);
+  app.use("/api/branches", branchesRouter);
+  app.use("/api/notifications", notificationsRouter);
+  app.use("/api/company", companyRouter);
+  app.use("/api/sessions", sessionsRouter);
 
   // Must be registered LAST, after every route, so thrown/rejected errors
   // from anywhere above land here.

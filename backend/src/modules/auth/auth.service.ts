@@ -68,16 +68,61 @@ async function buildUserResponse(user: User) {
   };
 }
 
-export async function login(loginId: string, password: string) {
+
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
+
+export async function login(loginId: string, password: string, meta?: { ip?: string; browser?: string }) {
   const user = await prisma.user.findUnique({ where: { loginId } });
-  if (!user) throw new AppError(401, "Invalid login ID or password");
+
+  // Record failed attempt for non-existent accounts too (timing-safe: always hash)
+  if (!user) {
+    await bcrypt.compare(password, "$2b$10$placeholder-hash-to-prevent-timing-attacks-000");
+    throw new AppError(401, "Invalid login ID or password");
+  }
+
+  // Check if account is disabled (soft-deleted)
+  if (user.isActive === false) {
+    await prisma.loginHistory.create({ data: { userId: user.id, ip: meta?.ip, browser: meta?.browser, status: "failed" } });
+    throw new AppError(403, "Your account has been disabled. Please contact the system administrator.");
+  }
+
+  // Check account lockout
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    await prisma.loginHistory.create({ data: { userId: user.id, ip: meta?.ip, browser: meta?.browser, status: "locked" } });
+    const mins = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    throw new AppError(423, `Account is locked. Try again in ${mins} minute(s).`);
+  }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) throw new AppError(401, "Invalid login ID or password");
+  if (!valid) {
+    const newCount = user.failedLoginAttempts + 1;
+    const shouldLock = newCount >= MAX_FAILED_ATTEMPTS;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: newCount,
+        lockedUntil: shouldLock ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) : null,
+      },
+    });
+    await prisma.loginHistory.create({ data: { userId: user.id, ip: meta?.ip, browser: meta?.browser, status: "failed" } });
+    if (shouldLock) {
+      throw new AppError(423, `Too many failed attempts. Account locked for ${LOCKOUT_MINUTES} minutes.`);
+    }
+    throw new AppError(401, `Invalid login ID or password. ${MAX_FAILED_ATTEMPTS - newCount} attempt(s) remaining.`);
+  }
+
+  // Successful login — reset lockout, update timestamps
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date(), lastSeenAt: new Date(), onlineStatus: "online" },
+  });
+  await prisma.loginHistory.create({ data: { userId: user.id, ip: meta?.ip, browser: meta?.browser, status: "success" } });
 
   const token = signInternalToken({ userId: user.id, isAdmin: user.isAdmin, sessionStart: nowSeconds() });
   return { token, user: await buildUserResponse(user) };
 }
+
 
 export async function signup(loginId: string, email: string, password: string) {
   const existingLoginId = await prisma.user.findUnique({ where: { loginId } });

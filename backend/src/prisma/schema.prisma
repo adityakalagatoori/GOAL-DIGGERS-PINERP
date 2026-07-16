@@ -7,6 +7,180 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ---------- New Enterprise Models ----------
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users User[]
+
+  @@map("departments")
+}
+
+model Branch {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  city      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users User[]
+
+  @@map("branches")
+}
+
+// Role defines a named set of module-level permissions.
+// isSystem = true means it cannot be deleted (only edited).
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique  // e.g. "sales_executive"
+  label       String            // e.g. "Sales Executive"
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+// One row per (role, module) combination storing all 7 permission flags.
+model RolePermission {
+  id       Int    @id @default(autoincrement())
+  roleId   Int
+  module   String // e.g. "dashboard", "sales", "purchase", "manufacturing", "bom", "products", "vendors", "signals", "intel_hub", "insights", "production_health", "user_management", "audit_logs"
+  canView   Boolean @default(false)
+  canCreate Boolean @default(false)
+  canEdit   Boolean @default(false)
+  canDelete Boolean @default(false)
+  canApprove Boolean @default(false)
+  canExport  Boolean @default(false)
+  canImport  Boolean @default(false)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, module])
+  @@map("role_permissions")
+}
+
+// Persistent in-database notifications (replaces the in-memory store).
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String   // e.g. "signal", "low_stock", "order_assigned", "approval_required", "system"
+  title     String
+  message   String   @db.Text
+  href      String?
+  isRead    Boolean  @default(false)
+  priority  String   @default("normal") // "low", "normal", "high", "urgent"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// Company-wide singleton settings (only one row, id = 1).
+model CompanySettings {
+  id                 Int      @id @default(autoincrement())
+  companyName        String   @default("PINERP Company")
+  logoUrl            String?
+  gstNumber          String?
+  address            String?
+  currency           String   @default("INR")
+  timezone           String   @default("Asia/Kolkata")
+  financialYearStart String   @default("04-01") // MM-DD
+  taxPercentage      Decimal  @default(18) @db.Decimal(5, 2)
+  smtpUser           String?
+  updatedAt          DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+// Login history for audit and session management.
+model LoginHistory {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  ip         String?
+  browser    String?
+  status     String   @default("success") // "success" | "failed" | "locked"
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("login_history")
+}
+
+// Active sessions for the Session Management page.
+model ActiveSession {
+  id           String   @id // UUID
+  userId       Int
+  ip           String?
+  browser      String?
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("active_sessions")
+}
+
+// Configurable approval workflow definition.
+model ApprovalWorkflow {
+  id        Int      @id @default(autoincrement())
+  name      String
+  module    String   // "purchase", "sales", etc.
+  condition Json     // e.g. { "field": "total", "operator": ">", "value": 100000 }
+  steps     Json     // array of { "roleId": number, "label": string }
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  requests ApprovalRequest[]
+
+  @@map("approval_workflows")
+}
+
+// An instance of an approval workflow for a specific entity.
+model ApprovalRequest {
+  id           Int      @id @default(autoincrement())
+  workflowId   Int
+  entityType   String   // "purchase_order", "sales_order"
+  entityId     Int
+  status       String   @default("pending") // "pending", "approved", "rejected"
+  currentStep  Int      @default(0)
+  createdByUserId Int
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  workflow    ApprovalWorkflow @relation(fields: [workflowId], references: [id])
+  createdBy   User             @relation("ApprovalCreator", fields: [createdByUserId], references: [id])
+
+  @@map("approval_requests")
+}
+
+// Future-ready leave management.
+model LeaveRequest {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String   // "casual", "sick", "earned", "unpaid"
+  fromDate  DateTime
+  toDate    DateTime
+  reason    String?
+  status    String   @default("pending") // "pending", "approved", "rejected"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("leave_requests")
+}
+
 // ---------- Enums ----------
 
 enum PermissionModule {
@@ -124,16 +298,44 @@ model User {
   email        String   @unique
   passwordHash String
   name         String
+
+  // Enterprise fields
+  employeeId   String?  @unique // Auto-generated: EMP-0001
+  firstName    String?
+  lastName     String?
+  username     String?  @unique // Same as loginId, kept for display
+  departmentId Int?
+  roleId       Int?
+  managerId    Int?     // Self-reference
+  branchId     Int?
+  designation  String?
+  phone        String?
+  joiningDate  DateTime?
+  isActive     Boolean  @default(true)  // false = soft disabled
+
+  // Keep existing fields
   address      String?
   mobile       String?
   position     String?
   photoUrl     String?
   isAdmin      Boolean  @default(false)
   createdAt    DateTime @default(now())
-  // Reputation points awarded by an admin after offline-confirming a tip was
-  // genuinely useful (e.g. the supplier was real, the price held up) — never
-  // auto-awarded just for posting, so the leaderboard can't be farmed by spam.
   intelStars   Int      @default(0)
+
+  // Session / Security
+  lastLoginAt           DateTime?
+  lastSeenAt            DateTime?
+  onlineStatus          String    @default("offline") // "online" | "offline" | "busy" | "away"
+  failedLoginAttempts   Int       @default(0)
+  lockedUntil           DateTime?
+  passwordChangedAt     DateTime?
+
+  // Relations
+  department   Department? @relation(fields: [departmentId], references: [id])
+  role         Role?       @relation(fields: [roleId], references: [id])
+  manager      User?       @relation("UserManager", fields: [managerId], references: [id])
+  reports      User[]      @relation("UserManager")
+  branch       Branch?     @relation(fields: [branchId], references: [id])
 
   permissions                  Permission[]
   salesOrdersAsSalesperson     SalesOrder[]         @relation("SalesPerson")
@@ -146,9 +348,15 @@ model User {
   intelPosts                   IntelPost[]          @relation("IntelPostAuthor")
   intelPostsVerified           IntelPost[]          @relation("IntelPostVerifier")
   intelHubView                 IntelHubView?
+  notifications                Notification[]
+  loginHistory                 LoginHistory[]
+  activeSessions               ActiveSession[]
+  approvalRequests             ApprovalRequest[]    @relation("ApprovalCreator")
+  leaveRequests                LeaveRequest[]
 
   @@map("users")
 }
+
 
 // One-time tokens emailed to a user's account email for the "Forgot
 // Password" flow. Only the sha256 hash is stored — the raw token (the
@@ -599,6 +807,8 @@ model AuditLog {
   oldValue     String?
   newValue     String?
   userId       Int?
+  ip           String?
+  browser      String?
   createdAt    DateTime          @default(now())
 
   user User? @relation(fields: [userId], references: [id])
@@ -608,6 +818,7 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
 
 // ---------- Customer portal support tables ----------
 

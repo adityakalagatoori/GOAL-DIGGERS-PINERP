@@ -7,6 +7,95 @@ export type PurchaseOrderStatus = 'draft' | 'confirmed' | 'partially_received' |
 export type ManufacturingOrderStatus = 'draft' | 'confirmed' | 'in_progress' | 'done' | 'cancelled';
 export type PermissionModule = 'sales' | 'purchase' | 'manufacturing' | 'product';
 
+export type AppModule =
+  | 'dashboard' | 'sales' | 'purchase' | 'manufacturing' | 'bom'
+  | 'products' | 'vendors' | 'signals' | 'intel_hub' | 'insights'
+  | 'production_health' | 'user_management' | 'audit_logs';
+
+export interface RolePermission {
+  id: number;
+  roleId: number;
+  module: AppModule | string;
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canApprove: boolean;
+  canExport: boolean;
+  canImport: boolean;
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  label: string;
+  isSystem: boolean;
+  createdAt?: string;
+  permissions: RolePermission[];
+}
+
+export interface Department {
+  id: number;
+  name: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface Branch {
+  id: number;
+  name: string;
+  city?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface Notification {
+  id: number;
+  userId: number;
+  type: string;
+  title: string;
+  message: string;
+  href?: string | null;
+  isRead: boolean;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  createdAt: string;
+}
+
+export interface CompanySettings {
+  id: number;
+  companyName: string;
+  logoUrl?: string | null;
+  gstNumber?: string | null;
+  address?: string | null;
+  currency: string;
+  timezone: string;
+  financialYearStart: string;
+  taxPercentage: number;
+  smtpUser?: string | null;
+  updatedAt: string;
+}
+
+export interface LoginHistory {
+  id: number;
+  userId: number;
+  user?: { id: number; name: string; email: string };
+  ip?: string | null;
+  browser?: string | null;
+  status: 'success' | 'failed' | 'locked';
+  createdAt: string;
+}
+
+export interface ActiveSession {
+  id: string;
+  userId: number;
+  user?: { id: number; name: string; email: string; employeeId?: string | null };
+  ip?: string | null;
+  browser?: string | null;
+  lastActiveAt: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export interface User {
   id: number;
   loginId: string;
@@ -18,6 +107,29 @@ export interface User {
   photoUrl?: string | null;
   isAdmin: boolean;
   permissions: Permission[];
+  // Enterprise fields
+  employeeId?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+  departmentId?: number | null;
+  roleId?: number | null;
+  managerId?: number | null;
+  branchId?: number | null;
+  designation?: string | null;
+  phone?: string | null;
+  joiningDate?: string | null;
+  isActive?: boolean;
+  lastLoginAt?: string | null;
+  lastSeenAt?: string | null;
+  onlineStatus?: 'online' | 'offline' | 'busy' | 'away';
+  intelStars?: number;
+  createdAt?: string;
+  // Expanded relations
+  department?: { id: number; name: string } | null;
+  role?: Role | null;
+  manager?: { id: number; name: string; employeeId?: string | null } | null;
+  branch?: { id: number; name: string } | null;
 }
 
 export interface Permission {
@@ -28,6 +140,7 @@ export interface Permission {
   canEdit: boolean;
   canDelete: boolean;
 }
+
 
 export interface Customer {
   id: number;

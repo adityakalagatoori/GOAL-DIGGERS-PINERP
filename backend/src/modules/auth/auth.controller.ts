@@ -11,10 +11,13 @@ import { setSessionCookie, clearSessionCookie, INTERNAL_SESSION_COOKIE, PORTAL_S
 
 export async function loginHandler(req: Request, res: Response) {
   const { loginId, password } = req.body;
-  const { token, user } = await authService.login(loginId, password);
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() ?? req.socket.remoteAddress;
+  const browser = req.headers["user-agent"]?.substring(0, 200);
+  const { token, user } = await authService.login(loginId, password, { ip, browser });
   setSessionCookie(res, INTERNAL_SESSION_COOKIE, token);
   res.json({ user });
 }
+
 
 export async function signupHandler(req: Request, res: Response) {
   const { loginId, email, password } = req.body;

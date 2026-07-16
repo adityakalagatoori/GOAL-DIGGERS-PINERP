@@ -12,6 +12,15 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
   io.on("connection", (socket) => {
     // eslint-disable-next-line no-console
     console.log(`Socket connected: ${socket.id}`);
+
+    // Client sends { userId } right after connect so we can route
+    // per-user notifications to the correct socket(s).
+    socket.on("join", (data: { userId?: number }) => {
+      if (data?.userId) {
+        socket.join(`user:${data.userId}`);
+      }
+    });
+
     socket.on("disconnect", () => {
       // eslint-disable-next-line no-console
       console.log(`Socket disconnected: ${socket.id}`);
@@ -27,4 +36,10 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
 export function getIO(): SocketIOServer {
   if (!io) throw new Error("Socket.io server not initialized — call initSocketServer() first");
   return io;
+}
+
+/** Push an event directly to a specific user's connected socket(s). */
+export function emitToUser(userId: number, event: string, payload: unknown): void {
+  if (!io) return;
+  io.to(`user:${userId}`).emit(event, payload);
 }

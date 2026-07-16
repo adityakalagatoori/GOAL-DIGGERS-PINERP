@@ -13,6 +13,8 @@ import {
   IntelPostStatus,
 } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { DEFAULT_ROLES, ALL_MODULES } from "../modules/roles/roles.service";
+
 
 const prisma = new PrismaClient();
 
@@ -131,6 +133,54 @@ async function makeUser(opts: {
 }
 
 async function main() {
+  // ---------- Enterprise: Roles ----------
+  for (const roleDef of DEFAULT_ROLES) {
+    const role = await prisma.role.upsert({
+      where: { name: roleDef.name },
+      update: { label: roleDef.label },
+      create: { name: roleDef.name, label: roleDef.label, isSystem: roleDef.isSystem },
+    });
+    for (const perm of roleDef.perms) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_module: { roleId: role.id, module: perm.module } },
+        update: { canView: perm.canView, canCreate: perm.canCreate, canEdit: perm.canEdit, canDelete: perm.canDelete, canApprove: perm.canApprove, canExport: perm.canExport, canImport: perm.canImport },
+        create: { roleId: role.id, module: perm.module, canView: perm.canView, canCreate: perm.canCreate, canEdit: perm.canEdit, canDelete: perm.canDelete, canApprove: perm.canApprove, canExport: perm.canExport, canImport: perm.canImport },
+      });
+    }
+  }
+
+  // ---------- Enterprise: Departments ----------
+  const departmentNames = [
+    "Sales", "Purchase", "Manufacturing", "Warehouse", "Inventory",
+    "Finance", "HR", "Quality Control", "Engineering", "Management", "IT", "Admin",
+  ];
+  for (const name of departmentNames) {
+    await prisma.department.upsert({ where: { name }, update: {}, create: { name } });
+  }
+
+  // ---------- Enterprise: Branch ----------
+  await prisma.branch.upsert({ where: { name: "HQ" }, update: {}, create: { name: "HQ", city: "Ahmedabad" } });
+
+  // ---------- Enterprise: Company Settings ----------
+  const existingSettings = await prisma.companySettings.findFirst();
+  if (!existingSettings) {
+    await prisma.companySettings.create({
+      data: { companyName: "PINERP Company", currency: "INR", timezone: "Asia/Kolkata", financialYearStart: "04-01", taxPercentage: 18 },
+    });
+  }
+
+  // Fetch role IDs for user assignment
+  const roles = await prisma.role.findMany({ select: { id: true, name: true } });
+  const getRoleId = (name: string) => roles.find((r) => r.name === name)?.id;
+  const adminRole = getRoleId("system_administrator");
+  const managerRole = getRoleId("manager");
+  const salesRole = getRoleId("sales_executive");
+  const purchaseRole = getRoleId("purchase_executive");
+  const productionRole = getRoleId("production_manager");
+
+  const depts = await prisma.department.findMany({ select: { id: true, name: true } });
+  const getDeptId = (name: string) => depts.find((d) => d.name === name)?.id;
+
   // ---------- Users ----------
   const admin = await makeUser({
     loginId: "admin",
