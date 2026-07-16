@@ -183,6 +183,9 @@ export async function deletePurchaseOrder(id: number, userId?: number, isAdmin?:
 
 export async function confirmPurchaseOrder(id: number, userId: number) {
   return prisma.$transaction(async (tx) => {
+    // Row lock — see deliverSalesOrder in sales.service.ts for why this is
+    // needed to close the check-then-act race on status transitions.
+    await tx.$queryRaw`SELECT id FROM purchase_orders WHERE id = ${id} FOR UPDATE`;
     const po = await tx.purchaseOrder.findUnique({ where: { id } });
     if (!po) throw new AppError(404, "Purchase order not found");
     if (po.status !== "draft") throw new AppError(400, "Only a Draft order can be confirmed");
@@ -214,6 +217,7 @@ export async function receivePurchaseOrder(id: number, receipts: ReceiveLineInpu
   const touchedProductIds = new Set<number>();
 
   const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM purchase_orders WHERE id = ${id} FOR UPDATE`;
     const po = await tx.purchaseOrder.findUnique({ where: { id }, include: { lines: true } });
     if (!po) throw new AppError(404, "Purchase order not found");
     if (po.status !== "confirmed" && po.status !== "partially_received") {
@@ -261,6 +265,7 @@ export async function receivePurchaseOrder(id: number, receipts: ReceiveLineInpu
 
 export async function cancelPurchaseOrder(id: number, userId: number) {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM purchase_orders WHERE id = ${id} FOR UPDATE`;
     const po = await tx.purchaseOrder.findUnique({ where: { id } });
     if (!po) throw new AppError(404, "Purchase order not found");
     if (po.status === "fully_received" || po.status === "cancelled") {

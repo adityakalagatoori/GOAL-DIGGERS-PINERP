@@ -187,6 +187,9 @@ export async function deleteManufacturingOrder(id: number, userId?: number, isAd
  */
 export async function confirmManufacturingOrder(id: number, userId: number) {
   return prisma.$transaction(async (tx) => {
+    // Row lock — see deliverSalesOrder in sales.service.ts for why this is
+    // needed to close the check-then-act race on status transitions.
+    await tx.$queryRaw`SELECT id FROM manufacturing_orders WHERE id = ${id} FOR UPDATE`;
     const mo = await tx.manufacturingOrder.findUnique({ where: { id }, include: { components: true } });
     if (!mo) throw new AppError(404, "Manufacturing order not found");
     if (mo.status !== "draft") throw new AppError(400, "Only a Draft order can be confirmed");
@@ -209,6 +212,7 @@ export async function confirmManufacturingOrder(id: number, userId: number) {
 
 export async function startManufacturingOrder(id: number, userId: number) {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM manufacturing_orders WHERE id = ${id} FOR UPDATE`;
     const mo = await tx.manufacturingOrder.findUnique({ where: { id } });
     if (!mo) throw new AppError(404, "Manufacturing order not found");
     if (mo.status !== "confirmed") throw new AppError(400, "Only a Confirmed order can be started");
@@ -226,39 +230,49 @@ export async function startManufacturingOrder(id: number, userId: number) {
 }
 
 export async function updateComponentConsumption(id: number, updates: { id: number; consumedQty: number }[], userId: number) {
-  const mo = await prisma.manufacturingOrder.findUnique({ where: { id } });
-  if (!mo) throw new AppError(404, "Manufacturing order not found");
-  if (mo.status !== "confirmed" && mo.status !== "in_progress") {
-    throw new AppError(400, "Consumed quantity can only be recorded while Confirmed or In Progress");
-  }
-  for (const u of updates) {
-    // Scoped by manufacturingOrderId, not just the component's own id — a
-    // component id belonging to a DIFFERENT MO must not be reachable through
-    // this MO's URL, or a caller could corrupt consumption data on orders
-    // they were never authorized to touch.
-    await prisma.moComponent.updateMany({
-      where: { id: u.id, manufacturingOrderId: id },
-      data: { consumedQty: u.consumedQty },
-    });
-  }
-  return prisma.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
+  return prisma.$transaction(async (tx) => {
+    // Locked + transactional: consumedQty here is read by produceManufacturingOrder
+    // to decide how much stock to deduct, so two concurrent consumption
+    // updates racing (last-write-wins with no lock) could silently drop one
+    // operator's recorded quantities before production runs.
+    await tx.$queryRaw`SELECT id FROM manufacturing_orders WHERE id = ${id} FOR UPDATE`;
+    const mo = await tx.manufacturingOrder.findUnique({ where: { id } });
+    if (!mo) throw new AppError(404, "Manufacturing order not found");
+    if (mo.status !== "confirmed" && mo.status !== "in_progress") {
+      throw new AppError(400, "Consumed quantity can only be recorded while Confirmed or In Progress");
+    }
+    for (const u of updates) {
+      // Scoped by manufacturingOrderId, not just the component's own id — a
+      // component id belonging to a DIFFERENT MO must not be reachable through
+      // this MO's URL, or a caller could corrupt consumption data on orders
+      // they were never authorized to touch.
+      await tx.moComponent.updateMany({
+        where: { id: u.id, manufacturingOrderId: id },
+        data: { consumedQty: u.consumedQty },
+      });
+    }
+    return tx.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
+  }, { timeout: 20000 });
 }
 
 export async function updateWorkOrderDuration(id: number, updates: { id: number; realDurationMins: number }[]) {
-  const mo = await prisma.manufacturingOrder.findUnique({ where: { id } });
-  if (!mo) throw new AppError(404, "Manufacturing order not found");
-  if (mo.status !== "confirmed" && mo.status !== "in_progress") {
-    throw new AppError(400, "Real duration can only be recorded while Confirmed or In Progress");
-  }
-  for (const u of updates) {
-    // Same ownership scoping as updateComponentConsumption above — a
-    // work-order id from a different MO must not be writable via this MO's URL.
-    await prisma.moWorkOrder.updateMany({
-      where: { id: u.id, manufacturingOrderId: id },
-      data: { realDurationMins: u.realDurationMins },
-    });
-  }
-  return prisma.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM manufacturing_orders WHERE id = ${id} FOR UPDATE`;
+    const mo = await tx.manufacturingOrder.findUnique({ where: { id } });
+    if (!mo) throw new AppError(404, "Manufacturing order not found");
+    if (mo.status !== "confirmed" && mo.status !== "in_progress") {
+      throw new AppError(400, "Real duration can only be recorded while Confirmed or In Progress");
+    }
+    for (const u of updates) {
+      // Same ownership scoping as updateComponentConsumption above — a
+      // work-order id from a different MO must not be writable via this MO's URL.
+      await tx.moWorkOrder.updateMany({
+        where: { id: u.id, manufacturingOrderId: id },
+        data: { realDurationMins: u.realDurationMins },
+      });
+    }
+    return tx.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
+  }, { timeout: 20000 });
 }
 
 /**
@@ -271,6 +285,7 @@ export async function produceManufacturingOrder(id: number, userId: number) {
   const touchedProductIds = new Set<number>();
 
   const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM manufacturing_orders WHERE id = ${id} FOR UPDATE`;
     const mo = await tx.manufacturingOrder.findUnique({ where: { id }, include: { components: true } });
     if (!mo) throw new AppError(404, "Manufacturing order not found");
     if (mo.status !== "in_progress" && mo.status !== "confirmed") {
@@ -311,6 +326,7 @@ export async function produceManufacturingOrder(id: number, userId: number) {
 
 export async function cancelManufacturingOrder(id: number, userId: number) {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM manufacturing_orders WHERE id = ${id} FOR UPDATE`;
     const mo = await tx.manufacturingOrder.findUnique({ where: { id } });
     if (!mo) throw new AppError(404, "Manufacturing order not found");
     if (mo.status === "done" || mo.status === "cancelled") {

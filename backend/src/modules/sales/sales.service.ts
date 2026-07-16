@@ -216,6 +216,11 @@ export async function deleteSalesOrder(id: number, userId?: number, isAdmin?: bo
  */
 export async function confirmSalesOrder(id: number, userId: number, pinActions: PinAction[] = []) {
   return prisma.$transaction(async (tx) => {
+    // Row lock held for the whole transaction: a second concurrent confirm
+    // on the same order blocks here until this one commits, instead of both
+    // reading status "draft" and both applying side effects (see race-
+    // condition fix notes on deliverSalesOrder below).
+    await tx.$queryRaw`SELECT id FROM sales_orders WHERE id = ${id} FOR UPDATE`;
     const so = await tx.salesOrder.findUnique({ where: { id }, include: { lines: true } });
     if (!so) throw new AppError(404, "Sales order not found");
     if (so.status !== "draft") throw new AppError(400, "Only a Draft order can be confirmed");
@@ -299,6 +304,14 @@ export async function deliverSalesOrder(id: number, deliveries: DeliverLineInput
   const touchedProductIds = new Set<number>();
 
   const result = await prisma.$transaction(async (tx) => {
+    // Without this lock, two concurrent deliveries for the same order both
+    // read the same stale deliveredQty/onHandQty snapshot (MySQL's default
+    // REPEATABLE READ does non-locking reads), both pass the "doesn't exceed
+    // orderedQty" check, and both apply their own decrement — silently
+    // over-delivering and double-decrementing stock. FOR UPDATE forces the
+    // second transaction to wait for the first to commit, then re-read fresh
+    // data, so deliveries against one order are strictly serialized.
+    await tx.$queryRaw`SELECT id FROM sales_orders WHERE id = ${id} FOR UPDATE`;
     const so = await tx.salesOrder.findUnique({ where: { id }, include: { lines: true } });
     if (!so) throw new AppError(404, "Sales order not found");
     if (so.status !== "confirmed" && so.status !== "partially_delivered") {
@@ -346,6 +359,7 @@ export async function deliverSalesOrder(id: number, deliveries: DeliverLineInput
 
 export async function cancelSalesOrder(id: number, userId: number) {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM sales_orders WHERE id = ${id} FOR UPDATE`;
     const so = await tx.salesOrder.findUnique({ where: { id } });
     if (!so) throw new AppError(404, "Sales order not found");
     if (so.status === "fully_delivered" || so.status === "cancelled") {
