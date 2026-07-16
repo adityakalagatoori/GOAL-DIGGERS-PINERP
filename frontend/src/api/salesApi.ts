@@ -2,7 +2,7 @@ import { apiFetch, buildQuery } from './client';
 import type { SalesOrder } from '../types';
 import type { PinAction } from './pinApi';
 
-export function listSalesOrders(params?: { search?: string; status?: string }) {
+export function listSalesOrders(params?: { search?: string; status?: string; dueDateFrom?: string; dueDateTo?: string }) {
   return apiFetch<SalesOrder[]>(`/api/sales${buildQuery(params ?? {})}`);
 }
 

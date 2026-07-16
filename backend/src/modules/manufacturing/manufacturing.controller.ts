@@ -2,7 +2,17 @@ import { Request, Response } from "express";
 import * as mfgService from "./manufacturing.service";
 
 export async function listManufacturingOrdersHandler(req: Request, res: Response) {
-  res.json(await mfgService.listManufacturingOrders(req.query.search as string | undefined, req.query.status as string | undefined));
+  res.json(
+    await mfgService.listManufacturingOrders({
+      search: req.query.search as string | undefined,
+      status: req.query.status as string | undefined,
+      scheduleDateFrom: req.query.scheduleDateFrom as string | undefined,
+      scheduleDateTo: req.query.scheduleDateTo as string | undefined,
+      createdBy: req.query.createdBy ? Number(req.query.createdBy) : undefined,
+      userId: req.user!.userId,
+      isAdmin: req.user!.isAdmin,
+    })
+  );
 }
 
 export async function getManufacturingOrderHandler(req: Request, res: Response) {

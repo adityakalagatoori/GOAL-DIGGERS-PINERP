@@ -20,13 +20,19 @@ const includeAll = {
 
 const VALID_STATUSES = new Set(Object.values(SalesOrderStatus));
 
-export async function listSalesOrders(search?: string, status?: string) {
-  // "late" is a derived filter, not a real status column value — handled
-  // separately from the enum check below (see countLateSalesOrders in the
-  // dashboard service for the matching definition).
-  // Matches the wireframe's "search receptive based on reference & contacts"
-  // note — reference is matched directly, "contacts" maps to the customer's
-  // name/email, since that's the only contact info attached to an order.
+interface ListFilters {
+  search?: string;
+  status?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+  createdBy?: number;
+  userId: number;
+  isAdmin: boolean;
+}
+
+export async function listSalesOrders(filters: ListFilters) {
+  const { search, status, dueDateFrom, dueDateTo, createdBy, userId, isAdmin } = filters;
+
   const searchClause = search
     ? {
         OR: [
@@ -37,27 +43,35 @@ export async function listSalesOrders(search?: string, status?: string) {
       }
     : {};
 
+  const dateClause = dueDateFrom || dueDateTo ? {} : {};
+  if (dueDateFrom) dateClause.dueDate = { ...dateClause.dueDate, gte: new Date(dueDateFrom) };
+  if (dueDateTo) dateClause.dueDate = { ...dateClause.dueDate, lte: new Date(dueDateTo) };
+
+  // Non-admins can only see orders they created, unless explicitly filtered by admin
+  const ownershipClause = isAdmin && createdBy ? { createdBy } : !isAdmin ? { createdBy: userId } : {};
+
   if (status === "late") {
     return prisma.salesOrder.findMany({
       where: {
         dueDate: { lt: new Date() },
         status: { notIn: ["fully_delivered", "cancelled"] },
         ...searchClause,
+        ...dateClause,
+        ...ownershipClause,
       },
       include: includeAll,
       orderBy: { createdAt: "desc" },
     });
   }
 
-  // An unrecognized status (e.g. a stray "undefined" from a malformed
-  // query string) is ignored rather than passed to Prisma, which would
-  // throw on an invalid enum value and crash the request with a 500.
   const validStatus = status && VALID_STATUSES.has(status as SalesOrderStatus) ? (status as SalesOrderStatus) : undefined;
 
   return prisma.salesOrder.findMany({
     where: {
       ...(validStatus ? { status: validStatus } : {}),
       ...searchClause,
+      ...dateClause,
+      ...ownershipClause,
     },
     include: includeAll,
     orderBy: { createdAt: "desc" },

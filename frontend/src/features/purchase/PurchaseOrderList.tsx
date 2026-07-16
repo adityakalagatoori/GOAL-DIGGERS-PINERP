@@ -13,24 +13,44 @@ const STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   fully_received: 'Fully Received', cancelled: 'Cancelled',
 };
 
+function formatDate(value?: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export function PurchaseOrderList() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | ''>('');
+  const [dueDateFrom, setDueDateFrom] = useState('');
+  const [dueDateTo, setDueDateTo] = useState('');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const statusFilter = searchParams.get('status') ?? undefined;
 
-  const refresh = () => listPurchaseOrders({ status: statusFilter, search: search || undefined }).then(setOrders).catch(console.error);
+  const refresh = () =>
+    listPurchaseOrders({
+      status: statusFilter || undefined,
+      search: search || undefined,
+      dueDateFrom: dueDateFrom || undefined,
+      dueDateTo: dueDateTo || undefined,
+    }).then(setOrders).catch(console.error);
 
   useEffect(() => {
     const debounce = setTimeout(refresh, 300);
     return () => clearTimeout(debounce);
-  }, [statusFilter, search]);
+  }, [statusFilter, search, dueDateFrom, dueDateTo]);
   useSocketEvent<{ orderType: string }>('order:status_changed', (p) => { if (p.orderType === 'purchase_order') refresh(); });
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (a.status === 'draft' && b.status !== 'draft') return -1;
+    if (a.status !== 'draft' && b.status === 'draft') return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   const columns = [
     { header: 'Reference', accessor: 'reference' as keyof PurchaseOrder },
+    { header: 'Due Date', accessor: (row: PurchaseOrder) => formatDate(row.dueDate) },
     { header: 'Vendor', accessor: (row: PurchaseOrder) => row.vendor?.name ?? '' },
     { header: 'Responsible', accessor: (row: PurchaseOrder) => row.responsiblePerson?.name ?? '' },
     {
@@ -50,7 +70,7 @@ export function PurchaseOrderList() {
   const kanbanColumns = (Object.keys(STATUS_LABEL) as PurchaseOrderStatus[]).map((status) => ({
     id: status,
     title: STATUS_LABEL[status],
-    items: orders.filter((o) => o.status === status),
+    items: sortedOrders.filter((o) => o.status === status),
   }));
 
   const renderKanbanCard = (order: PurchaseOrder) => (
@@ -64,18 +84,67 @@ export function PurchaseOrderList() {
   );
 
   return (
-    <ListView
-      title="Purchase Orders"
-      data={orders}
-      columns={columns}
-      onNew={() => navigate('/purchase/new')}
-      searchPlaceholder="Search by reference..."
-      searchValue={search}
-      onSearchChange={setSearch}
-      viewMode={viewMode}
-      onViewModeChange={setViewMode}
-      onRowClick={(row) => navigate(`/purchase/${row.id}`)}
-      kanbanComponent={<KanbanView columns={kanbanColumns} renderCard={renderKanbanCard} />}
-    />
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg border p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as PurchaseOrderStatus | '')}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            >
+              <option value="">All Statuses</option>
+              {(Object.keys(STATUS_LABEL) as PurchaseOrderStatus[]).map((status) => (
+                <option key={status} value={status}>{STATUS_LABEL[status]}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">From Date</label>
+            <input
+              type="date"
+              value={dueDateFrom}
+              onChange={(e) => setDueDateFrom(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">To Date</label>
+            <input
+              type="date"
+              value={dueDateTo}
+              onChange={(e) => setDueDateTo(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={() => { setStatusFilter(''); setDueDateFrom(''); setDueDateTo(''); }}
+              className="w-full px-3 py-2 rounded-md bg-foreground/10 text-sm hover:bg-foreground/20 transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ListView
+        title="Purchase Orders"
+        data={sortedOrders}
+        columns={columns}
+        onNew={() => navigate('/purchase/new')}
+        searchPlaceholder="Search by reference or vendor..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onRowClick={(row) => navigate(`/purchase/${row.id}`)}
+        kanbanComponent={<KanbanView columns={kanbanColumns} renderCard={renderKanbanCard} />}
+      />
+    </div>
   );
 }

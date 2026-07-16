@@ -1,7 +1,7 @@
 import { apiFetch, buildQuery } from './client';
 import type { ManufacturingOrder } from '../types';
 
-export function listManufacturingOrders(params?: { search?: string; status?: string }) {
+export function listManufacturingOrders(params?: { search?: string; status?: string; scheduleDateFrom?: string; scheduleDateTo?: string }) {
   return apiFetch<ManufacturingOrder[]>(`/api/manufacturing${buildQuery(params ?? {})}`);
 }
 

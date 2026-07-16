@@ -11,7 +11,17 @@ export const PURCHASE_FIELD_MAP: Record<string, string> = {
 };
 
 export async function listPurchaseOrdersHandler(req: Request, res: Response) {
-  res.json(await purchaseService.listPurchaseOrders(req.query.search as string | undefined, req.query.status as string | undefined));
+  res.json(
+    await purchaseService.listPurchaseOrders({
+      search: req.query.search as string | undefined,
+      status: req.query.status as string | undefined,
+      dueDateFrom: req.query.dueDateFrom as string | undefined,
+      dueDateTo: req.query.dueDateTo as string | undefined,
+      createdBy: req.query.createdBy ? Number(req.query.createdBy) : undefined,
+      userId: req.user!.userId,
+      isAdmin: req.user!.isAdmin,
+    })
+  );
 }
 
 export async function getPurchaseOrderHandler(req: Request, res: Response) {

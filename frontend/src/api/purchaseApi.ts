@@ -1,7 +1,7 @@
 import { apiFetch, buildQuery } from './client';
 import type { PurchaseOrder } from '../types';
 
-export function listPurchaseOrders(params?: { search?: string; status?: string }) {
+export function listPurchaseOrders(params?: { search?: string; status?: string; dueDateFrom?: string; dueDateTo?: string }) {
   return apiFetch<PurchaseOrder[]>(`/api/purchase${buildQuery(params ?? {})}`);
 }
 

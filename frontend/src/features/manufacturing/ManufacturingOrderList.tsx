@@ -12,7 +12,12 @@ const STATUS_LABEL: Record<ManufacturingOrderStatus, string> = {
   draft: 'Draft', confirmed: 'Confirmed', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled',
 };
 
-/** Quick client-side approximation: are all components currently on hand? */
+function formatDate(value?: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function componentsAvailable(order: ManufacturingOrder): boolean {
   return order.components.every((c) => Number(c.product?.onHandQty ?? 0) >= Number(c.toConsumeQty));
 }
@@ -21,20 +26,34 @@ export function ManufacturingOrderList() {
   const [orders, setOrders] = useState<ManufacturingOrder[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ManufacturingOrderStatus | ''>('');
+  const [scheduleDateFrom, setScheduleDateFrom] = useState('');
+  const [scheduleDateTo, setScheduleDateTo] = useState('');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const statusFilter = searchParams.get('status') ?? undefined;
 
-  const refresh = () => listManufacturingOrders({ status: statusFilter, search: search || undefined }).then(setOrders).catch(console.error);
+  const refresh = () =>
+    listManufacturingOrders({
+      status: statusFilter || undefined,
+      search: search || undefined,
+      scheduleDateFrom: scheduleDateFrom || undefined,
+      scheduleDateTo: scheduleDateTo || undefined,
+    }).then(setOrders).catch(console.error);
 
   useEffect(() => {
     const debounce = setTimeout(refresh, 300);
     return () => clearTimeout(debounce);
-  }, [statusFilter, search]);
+  }, [statusFilter, search, scheduleDateFrom, scheduleDateTo]);
   useSocketEvent<{ orderType: string }>('order:status_changed', (p) => { if (p.orderType === 'manufacturing_order') refresh(); });
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (a.status === 'draft' && b.status !== 'draft') return -1;
+    if (a.status !== 'draft' && b.status === 'draft') return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   const columns = [
     { header: 'Reference', accessor: 'reference' as keyof ManufacturingOrder },
+    { header: 'Scheduled', accessor: (row: ManufacturingOrder) => formatDate(row.scheduleDate) },
     { header: 'Finished Product', accessor: (row: ManufacturingOrder) => row.finishedProduct?.name ?? '' },
     { header: 'Quantity', accessor: 'quantity' as keyof ManufacturingOrder },
     {
@@ -58,7 +77,7 @@ export function ManufacturingOrderList() {
   const kanbanColumns = (Object.keys(STATUS_LABEL) as ManufacturingOrderStatus[]).map((status) => ({
     id: status,
     title: STATUS_LABEL[status],
-    items: orders.filter((o) => o.status === status),
+    items: sortedOrders.filter((o) => o.status === status),
   }));
 
   const renderKanbanCard = (order: ManufacturingOrder) => (
@@ -72,18 +91,67 @@ export function ManufacturingOrderList() {
   );
 
   return (
-    <ListView
-      title="Manufacturing Orders"
-      data={orders}
-      columns={columns}
-      onNew={() => navigate('/manufacturing/new')}
-      searchPlaceholder="Search by reference..."
-      searchValue={search}
-      onSearchChange={setSearch}
-      viewMode={viewMode}
-      onViewModeChange={setViewMode}
-      onRowClick={(row) => navigate(`/manufacturing/${row.id}`)}
-      kanbanComponent={<KanbanView columns={kanbanColumns} renderCard={renderKanbanCard} />}
-    />
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg border p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as ManufacturingOrderStatus | '')}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            >
+              <option value="">All Statuses</option>
+              {(Object.keys(STATUS_LABEL) as ManufacturingOrderStatus[]).map((status) => (
+                <option key={status} value={status}>{STATUS_LABEL[status]}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">From Date</label>
+            <input
+              type="date"
+              value={scheduleDateFrom}
+              onChange={(e) => setScheduleDateFrom(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">To Date</label>
+            <input
+              type="date"
+              value={scheduleDateTo}
+              onChange={(e) => setScheduleDateTo(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={() => { setStatusFilter(''); setScheduleDateFrom(''); setScheduleDateTo(''); }}
+              className="w-full px-3 py-2 rounded-md bg-foreground/10 text-sm hover:bg-foreground/20 transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ListView
+        title="Manufacturing Orders"
+        data={sortedOrders}
+        columns={columns}
+        onNew={() => navigate('/manufacturing/new')}
+        searchPlaceholder="Search by reference or product name..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onRowClick={(row) => navigate(`/manufacturing/${row.id}`)}
+        kanbanComponent={<KanbanView columns={kanbanColumns} renderCard={renderKanbanCard} />}
+      />
+    </div>
   );
 }

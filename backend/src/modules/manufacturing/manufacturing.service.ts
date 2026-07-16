@@ -18,28 +18,43 @@ const includeAll = {
 
 const VALID_STATUSES = new Set(Object.values(ManufacturingOrderStatus));
 
-/** True once every component on the order has been fully consumed. */
 export function isReadyToClose(mo: { components: { toConsumeQty: unknown; consumedQty: unknown }[] }): boolean {
   return mo.components.length > 0 && mo.components.every((c) => Number(c.consumedQty) >= Number(c.toConsumeQty));
 }
 
-// Matches reference OR the finished product's name — searching "Dining
-// Chair" is just as natural here as searching "MO-000152", same as Sales'
-// search matching customer name in addition to reference.
 function mfgSearchClause(search?: string) {
   return search ? { OR: [{ reference: { contains: search } }, { finishedProduct: { name: { contains: search } } }] } : {};
 }
 
-export async function listManufacturingOrders(search?: string, status?: string) {
-  // "late" and "to_close" are derived filters, not real status column values
-  // — see splitInProgressManufacturingOrders/countLateManufacturingOrders in
-  // the dashboard service for the matching definitions.
+interface ListFilters {
+  search?: string;
+  status?: string;
+  scheduleDateFrom?: string;
+  scheduleDateTo?: string;
+  createdBy?: number;
+  userId: number;
+  isAdmin: boolean;
+}
+
+export async function listManufacturingOrders(filters: ListFilters) {
+  const { search, status, scheduleDateFrom, scheduleDateTo, createdBy, userId, isAdmin } = filters;
+
+  const searchClause = mfgSearchClause(search);
+
+  const dateClause = scheduleDateFrom || scheduleDateTo ? {} : {};
+  if (scheduleDateFrom) dateClause.scheduleDate = { ...dateClause.scheduleDate, gte: new Date(scheduleDateFrom) };
+  if (scheduleDateTo) dateClause.scheduleDate = { ...dateClause.scheduleDate, lte: new Date(scheduleDateTo) };
+
+  const ownershipClause = isAdmin && createdBy ? { createdBy } : !isAdmin ? { createdBy: userId } : {};
+
   if (status === "late") {
     return prisma.manufacturingOrder.findMany({
       where: {
         scheduleDate: { lt: new Date() },
         status: { notIn: ["done", "cancelled"] },
-        ...mfgSearchClause(search),
+        ...searchClause,
+        ...dateClause,
+        ...ownershipClause,
       },
       include: includeAll,
       orderBy: { createdAt: "desc" },
@@ -48,7 +63,7 @@ export async function listManufacturingOrders(search?: string, status?: string) 
 
   if (status === "to_close" || status === "in_progress") {
     const rows = await prisma.manufacturingOrder.findMany({
-      where: { status: "in_progress", ...mfgSearchClause(search) },
+      where: { status: "in_progress", ...searchClause, ...dateClause, ...ownershipClause },
       include: includeAll,
       orderBy: { createdAt: "desc" },
     });
@@ -60,7 +75,9 @@ export async function listManufacturingOrders(search?: string, status?: string) 
   return prisma.manufacturingOrder.findMany({
     where: {
       ...(validStatus ? { status: validStatus } : {}),
-      ...mfgSearchClause(search),
+      ...searchClause,
+      ...dateClause,
+      ...ownershipClause,
     },
     include: includeAll,
     orderBy: { createdAt: "desc" },

@@ -16,16 +16,9 @@ const STATUS_LABEL: Record<SalesOrderStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-/** "Tomorrow"/"Yesterday"/"Today" for adjacent days, otherwise a short date — matches the wireframe's list-view Date column. */
-function formatRelativeDate(value?: string | null): string {
+function formatDate(value?: string | null): string {
   if (!value) return '-';
   const date = new Date(value);
-  const today = new Date();
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(date) - startOfDay(today)) / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Tomorrow';
-  if (diffDays === -1) return 'Yesterday';
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -33,21 +26,34 @@ export function SalesOrderList() {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<SalesOrderStatus | ''>('');
+  const [dueDateFrom, setDueDateFrom] = useState('');
+  const [dueDateTo, setDueDateTo] = useState('');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const statusFilter = searchParams.get('status') ?? undefined;
 
-  const refresh = () => listSalesOrders({ status: statusFilter, search: search || undefined }).then(setOrders).catch(console.error);
+  const refresh = () =>
+    listSalesOrders({
+      status: statusFilter || undefined,
+      search: search || undefined,
+      dueDateFrom: dueDateFrom || undefined,
+      dueDateTo: dueDateTo || undefined,
+    }).then(setOrders).catch(console.error);
 
   useEffect(() => {
     const debounce = setTimeout(refresh, 300);
     return () => clearTimeout(debounce);
-  }, [statusFilter, search]);
+  }, [statusFilter, search, dueDateFrom, dueDateTo]);
   useSocketEvent<{ orderType: string }>('order:status_changed', (p) => { if (p.orderType === 'sales_order') refresh(); });
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (a.status === 'draft' && b.status !== 'draft') return -1;
+    if (a.status !== 'draft' && b.status === 'draft') return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   const columns = [
     { header: 'Reference', accessor: 'reference' as keyof SalesOrder },
-    { header: 'Date', accessor: (row: SalesOrder) => formatRelativeDate(row.dueDate ?? row.createdAt) },
+    { header: 'Date', accessor: (row: SalesOrder) => formatDate(row.dueDate ?? row.createdAt) },
     { header: 'Customer', accessor: (row: SalesOrder) => row.customer?.name ?? '' },
     { header: 'Salesperson', accessor: (row: SalesOrder) => row.salesPerson?.name ?? '' },
     {
@@ -67,7 +73,7 @@ export function SalesOrderList() {
   const kanbanColumns = (Object.keys(STATUS_LABEL) as SalesOrderStatus[]).map((status) => ({
     id: status,
     title: STATUS_LABEL[status],
-    items: orders.filter((o) => o.status === status),
+    items: sortedOrders.filter((o) => o.status === status),
   }));
 
   const renderKanbanCard = (order: SalesOrder) => (
@@ -80,23 +86,72 @@ export function SalesOrderList() {
         <Badge variant="default" className="text-[10px]">{STATUS_LABEL[order.status]}</Badge>
       </div>
       <p className="text-sm text-foreground/70">{order.customer?.name}</p>
-      <p className="text-xs text-foreground/50 mt-1">{formatRelativeDate(order.dueDate ?? order.createdAt)}</p>
+      <p className="text-xs text-foreground/50 mt-1">{formatDate(order.dueDate ?? order.createdAt)}</p>
     </Card>
   );
 
   return (
-    <ListView
-      title="Sales Orders"
-      data={orders}
-      columns={columns}
-      onNew={() => navigate('/sales/new')}
-      searchPlaceholder="Search by reference or customer..."
-      searchValue={search}
-      onSearchChange={setSearch}
-      viewMode={viewMode}
-      onViewModeChange={setViewMode}
-      onRowClick={(row) => navigate(`/sales/${row.id}`)}
-      kanbanComponent={<KanbanView columns={kanbanColumns} renderCard={renderKanbanCard} />}
-    />
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg border p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as SalesOrderStatus | '')}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            >
+              <option value="">All Statuses</option>
+              {(Object.keys(STATUS_LABEL) as SalesOrderStatus[]).map((status) => (
+                <option key={status} value={status}>{STATUS_LABEL[status]}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">From Date</label>
+            <input
+              type="date"
+              value={dueDateFrom}
+              onChange={(e) => setDueDateFrom(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground/70 mb-1 block">To Date</label>
+            <input
+              type="date"
+              value={dueDateTo}
+              onChange={(e) => setDueDateTo(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={() => { setStatusFilter(''); setDueDateFrom(''); setDueDateTo(''); }}
+              className="w-full px-3 py-2 rounded-md bg-foreground/10 text-sm hover:bg-foreground/20 transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ListView
+        title="Sales Orders"
+        data={sortedOrders}
+        columns={columns}
+        onNew={() => navigate('/sales/new')}
+        searchPlaceholder="Search by reference or customer..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onRowClick={(row) => navigate(`/sales/${row.id}`)}
+        kanbanComponent={<KanbanView columns={kanbanColumns} renderCard={renderKanbanCard} />}
+      />
+    </div>
   );
 }

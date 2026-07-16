@@ -15,22 +15,39 @@ const includeAll = {
 
 const VALID_STATUSES = new Set(Object.values(PurchaseOrderStatus));
 
-// Matches reference OR the vendor's name — searching "Wood Co." is just as
-// natural here as searching "PO-000003", same as Sales' search matching
-// customer name in addition to reference.
 function purchaseSearchClause(search?: string) {
   return search ? { OR: [{ reference: { contains: search } }, { vendor: { name: { contains: search } } }] } : {};
 }
 
-export async function listPurchaseOrders(search?: string, status?: string) {
-  // "late" is a derived filter, not a real status column value — see
-  // countLatePurchaseOrders in the dashboard service for the matching definition.
+interface ListFilters {
+  search?: string;
+  status?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+  createdBy?: number;
+  userId: number;
+  isAdmin: boolean;
+}
+
+export async function listPurchaseOrders(filters: ListFilters) {
+  const { search, status, dueDateFrom, dueDateTo, createdBy, userId, isAdmin } = filters;
+
+  const searchClause = purchaseSearchClause(search);
+
+  const dateClause = dueDateFrom || dueDateTo ? {} : {};
+  if (dueDateFrom) dateClause.dueDate = { ...dateClause.dueDate, gte: new Date(dueDateFrom) };
+  if (dueDateTo) dateClause.dueDate = { ...dateClause.dueDate, lte: new Date(dueDateTo) };
+
+  const ownershipClause = isAdmin && createdBy ? { createdBy } : !isAdmin ? { createdBy: userId } : {};
+
   if (status === "late") {
     return prisma.purchaseOrder.findMany({
       where: {
         dueDate: { lt: new Date() },
         status: { notIn: ["fully_received", "cancelled"] },
-        ...purchaseSearchClause(search),
+        ...searchClause,
+        ...dateClause,
+        ...ownershipClause,
       },
       include: includeAll,
       orderBy: { createdAt: "desc" },
@@ -42,7 +59,9 @@ export async function listPurchaseOrders(search?: string, status?: string) {
   return prisma.purchaseOrder.findMany({
     where: {
       ...(validStatus ? { status: validStatus } : {}),
-      ...purchaseSearchClause(search),
+      ...searchClause,
+      ...dateClause,
+      ...ownershipClause,
     },
     include: includeAll,
     orderBy: { createdAt: "desc" },
