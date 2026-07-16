@@ -19,6 +19,11 @@ export function getUser(id: number) {
   return apiFetch<User>(`/api/users/${id}`);
 }
 
+/** Minimal id/name list any authenticated user can call, for "assign to" dropdowns (Sales Person, Responsible Person, etc.) — unlike listUsers(), not admin-gated. */
+export function listUserDirectory() {
+  return apiFetch<{ id: number; name: string; position?: string | null }[]>('/api/users/directory');
+}
+
 export function createUser(data: {
   loginId: string; email: string; password: string; name: string;
   firstName?: string; lastName?: string; position?: string; designation?: string;
