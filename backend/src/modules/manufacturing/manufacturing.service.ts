@@ -201,7 +201,7 @@ export async function confirmManufacturingOrder(id: number, userId: number) {
     }
 
     return tx.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
-  }).then((result) => {
+  }, { timeout: 20000 }).then((result) => {
     getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "manufacturing_order", orderId: id, newStatus: "confirmed" });
     return result;
   });
@@ -219,7 +219,7 @@ export async function startManufacturingOrder(id: number, userId: number) {
     });
 
     return tx.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
-  }).then((result) => {
+  }, { timeout: 20000 }).then((result) => {
     getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "manufacturing_order", orderId: id, newStatus: "in_progress" });
     return result;
   });
@@ -298,7 +298,7 @@ export async function produceManufacturingOrder(id: number, userId: number) {
     });
 
     return tx.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
-  });
+  }, { timeout: 20000 });
 
   getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "manufacturing_order", orderId: id, newStatus: "done" });
   for (const productId of touchedProductIds) {
@@ -323,7 +323,7 @@ export async function cancelManufacturingOrder(id: number, userId: number) {
     });
 
     return tx.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
-  }).then((result) => {
+  }, { timeout: 20000 }).then((result) => {
     getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "manufacturing_order", orderId: id, newStatus: "cancelled" });
     return result;
   });

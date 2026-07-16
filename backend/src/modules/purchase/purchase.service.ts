@@ -166,7 +166,7 @@ export async function updatePurchaseOrder(id: number, data: Partial<CreateInput>
     });
 
     return tx.purchaseOrder.findUnique({ where: { id }, include: includeAll });
-  });
+  }, { timeout: 20000 });
 }
 
 export async function deletePurchaseOrder(id: number, userId?: number) {
@@ -193,7 +193,7 @@ export async function confirmPurchaseOrder(id: number, userId: number) {
     });
 
     return tx.purchaseOrder.findUnique({ where: { id }, include: includeAll });
-  }).then((result) => {
+  }, { timeout: 20000 }).then((result) => {
     getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "purchase_order", orderId: id, newStatus: "confirmed" });
     return result;
   });
@@ -248,7 +248,7 @@ export async function receivePurchaseOrder(id: number, receipts: ReceiveLineInpu
     });
 
     return tx.purchaseOrder.findUnique({ where: { id }, include: includeAll });
-  });
+  }, { timeout: 20000 });
 
   getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "purchase_order", orderId: id, newStatus: result!.status });
   for (const productId of touchedProductIds) {
@@ -273,7 +273,7 @@ export async function cancelPurchaseOrder(id: number, userId: number) {
     });
 
     return tx.purchaseOrder.findUnique({ where: { id }, include: includeAll });
-  }).then((result) => {
+  }, { timeout: 20000 }).then((result) => {
     getIO().emit(SOCKET_EVENTS.ORDER_STATUS_CHANGED, { orderType: "purchase_order", orderId: id, newStatus: "cancelled" });
     return result;
   });
