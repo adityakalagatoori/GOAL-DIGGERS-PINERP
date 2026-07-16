@@ -188,7 +188,8 @@ npm run prisma:migrate # create a new migration during development
 - **Backend** needs a platform that runs a persistent Node process (it holds a MySQL connection pool and a Socket.io WebSocket server) — Vercel's serverless functions do not support this. Use Railway, Render, Fly.io, or a VPS instead. Set the same environment variables as `backend/.env` above (with production values, including `NODE_ENV=production`, a real `FRONTEND_URL`, and a managed MySQL database URL), then run `npx prisma migrate deploy` once during deploy before starting the server.
 - In production, session cookies switch to `SameSite=None; Secure`, which requires the deployed site to be served over HTTPS.
 
-
+ADMIN CREDENTIALS - admin 
+password - Demo@1234
 
 
 **Project Structure**
