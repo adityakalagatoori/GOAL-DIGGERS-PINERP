@@ -15,7 +15,7 @@ export function validateRequest(schema: ZodType, part: RequestPart = "body") {
       res.status(400).json({ error: "Validation failed", details: z.treeifyError(result.error) });
       return;
     }
-    (req as Record<string, unknown>)[part] = result.data;
+    (req as unknown as Record<string, unknown>)[part] = result.data;
     next();
   };
 }

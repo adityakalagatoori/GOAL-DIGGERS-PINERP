@@ -36,7 +36,7 @@ export async function createProductHandler(req: Request, res: Response) {
     PRODUCT_FIELD_MAP
   );
   res.status(201).json(
-    await productsService.createProduct(data as Parameters<typeof productsService.createProduct>[0], req.user!.userId)
+    await productsService.createProduct(data as unknown as Parameters<typeof productsService.createProduct>[0], req.user!.userId)
   );
 }
 

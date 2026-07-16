@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import * as svc from "./users.service";
-import { ApiError } from "../../middleware/errorHandler";
 
 export async function listUsersHandler(req: Request, res: Response, next: NextFunction) {
   try {
