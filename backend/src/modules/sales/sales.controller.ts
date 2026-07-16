@@ -15,7 +15,7 @@ export async function listSalesOrdersHandler(req: Request, res: Response) {
 }
 
 export async function getSalesOrderHandler(req: Request, res: Response) {
-  res.json(await salesService.getSalesOrder(Number(req.params.id)));
+  res.json(await salesService.getSalesOrder(Number(req.params.id), req.user?.userId));
 }
 
 export async function createSalesOrderHandler(req: Request, res: Response) {

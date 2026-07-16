@@ -49,9 +49,10 @@ export async function listPurchaseOrders(search?: string, status?: string) {
   });
 }
 
-export async function getPurchaseOrder(id: number) {
+export async function getPurchaseOrder(id: number, userId?: number) {
   const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: includeAll });
   if (!po) throw new AppError(404, "Purchase order not found");
+  if (userId && po.createdBy !== userId) throw new AppError(403, "You do not have access to this purchase order");
   return po;
 }
 
@@ -96,6 +97,7 @@ export async function createPurchaseOrder(data: CreateInput, userId?: number) {
       vendorId: data.vendorId,
       vendorAddress: data.vendorAddress,
       responsiblePersonId: data.responsiblePersonId,
+      createdBy: userId || 1,
       dueDate: data.dueDate,
       status: "draft",
       lines: { create: lines },
@@ -115,6 +117,9 @@ export async function updatePurchaseOrder(id: number, data: Partial<CreateInput>
   if (!existing) throw new AppError(404, "Purchase order not found");
   if (existing.status !== "draft") {
     throw new AppError(400, "Only a Draft purchase order can be edited");
+  }
+  if (userId && existing.createdBy !== userId) {
+    throw new AppError(403, "Only the order creator can edit this purchase order");
   }
 
   return prisma.$transaction(async (tx) => {
@@ -144,9 +149,13 @@ export async function updatePurchaseOrder(id: number, data: Partial<CreateInput>
 
 export async function deletePurchaseOrder(id: number, userId?: number) {
   const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
+  if (!existing) throw new AppError(404, "Purchase order not found");
+  if (userId && existing.createdBy !== userId) {
+    throw new AppError(403, "Only the order creator can delete this purchase order");
+  }
   await prisma.purchaseOrder.delete({ where: { id } });
   await prisma.auditLog.create({
-    data: { module: "purchase", entity: "PurchaseOrder", recordId: id, recordRef: existing?.reference, action: "deleted", userId },
+    data: { module: "purchase", entity: "PurchaseOrder", recordId: id, recordRef: existing.reference, action: "deleted", userId },
   });
 }
 

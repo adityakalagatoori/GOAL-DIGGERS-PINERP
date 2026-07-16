@@ -67,9 +67,10 @@ export async function listManufacturingOrders(search?: string, status?: string) 
   });
 }
 
-export async function getManufacturingOrder(id: number) {
+export async function getManufacturingOrder(id: number, userId?: number) {
   const mo = await prisma.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
   if (!mo) throw new AppError(404, "Manufacturing order not found");
+  if (userId && mo.createdBy !== userId) throw new AppError(403, "You do not have access to this manufacturing order");
   return mo;
 }
 
@@ -114,6 +115,7 @@ export async function createManufacturingOrder(data: CreateInput, userId?: numbe
       bomId: data.bomId,
       scheduleDate: data.scheduleDate,
       assigneeId: data.assigneeId,
+      createdBy: userId || 1,
       status: "draft",
       components: { create: componentsCreate },
       workOrders: { create: workOrdersCreate },
@@ -134,6 +136,9 @@ export async function updateManufacturingOrder(id: number, data: Partial<CreateI
   if (existing.status !== "draft") {
     throw new AppError(400, "Only a Draft manufacturing order can be edited");
   }
+  if (userId && existing.createdBy !== userId) {
+    throw new AppError(403, "Only the order creator can edit this manufacturing order");
+  }
   const { bomId, finishedProductId, ...rest } = data as any;
   const mo = await prisma.manufacturingOrder.update({ where: { id }, data: rest, include: includeAll });
   await prisma.auditLog.create({
@@ -144,9 +149,13 @@ export async function updateManufacturingOrder(id: number, data: Partial<CreateI
 
 export async function deleteManufacturingOrder(id: number, userId?: number) {
   const existing = await prisma.manufacturingOrder.findUnique({ where: { id } });
+  if (!existing) throw new AppError(404, "Manufacturing order not found");
+  if (userId && existing.createdBy !== userId) {
+    throw new AppError(403, "Only the order creator can delete this manufacturing order");
+  }
   await prisma.manufacturingOrder.delete({ where: { id } });
   await prisma.auditLog.create({
-    data: { module: "manufacturing", entity: "ManufacturingOrder", recordId: id, recordRef: existing?.reference, action: "deleted", userId },
+    data: { module: "manufacturing", entity: "ManufacturingOrder", recordId: id, recordRef: existing.reference, action: "deleted", userId },
   });
 }
 

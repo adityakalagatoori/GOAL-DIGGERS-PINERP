@@ -339,8 +339,11 @@ model User {
 
   permissions                  Permission[]
   salesOrdersAsSalesperson     SalesOrder[]         @relation("SalesPerson")
+  salesOrdersCreated           SalesOrder[]         @relation("SalesOrderCreator")
   purchaseOrdersAsResponsible  PurchaseOrder[]      @relation("ResponsiblePerson")
+  purchaseOrdersCreated        PurchaseOrder[]      @relation("PurchaseOrderCreator")
   manufacturingOrdersAsAssignee ManufacturingOrder[] @relation("Assignee")
+  manufacturingOrdersCreated   ManufacturingOrder[] @relation("ManufacturingOrderCreator")
   auditLogs                    AuditLog[]
   marketSignals                MarketSignal[]
   stockLedgerEntries           StockLedger[]
@@ -567,6 +570,7 @@ model SalesOrder {
   customerId      Int
   customerAddress String?
   salesPersonId   Int?
+  createdBy       Int              @default(1)
   dueDate         DateTime?
   status          SalesOrderStatus @default(draft)
   createdAt       DateTime         @default(now())
@@ -577,6 +581,7 @@ model SalesOrder {
 
   customer    Customer         @relation(fields: [customerId], references: [id])
   salesPerson User?            @relation("SalesPerson", fields: [salesPersonId], references: [id])
+  creator     User             @relation("SalesOrderCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   lines       SalesOrderLine[]
   reviews     CustomerReview[]
 
@@ -605,12 +610,14 @@ model PurchaseOrder {
   vendorId            Int
   vendorAddress       String?
   responsiblePersonId Int?
+  createdBy           Int              @default(1)
   dueDate             DateTime?
   status              PurchaseOrderStatus @default(draft)
   createdAt           DateTime            @default(now())
 
   vendor            Vendor              @relation(fields: [vendorId], references: [id])
   responsiblePerson User?               @relation("ResponsiblePerson", fields: [responsiblePersonId], references: [id])
+  creator           User                @relation("PurchaseOrderCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   lines             PurchaseOrderLine[]
 
   @@map("purchase_orders")
@@ -640,12 +647,14 @@ model ManufacturingOrder {
   bomId             Int?
   scheduleDate      DateTime?
   assigneeId        Int?
+  createdBy         Int              @default(1)
   status            ManufacturingOrderStatus @default(draft)
   createdAt         DateTime                 @default(now())
 
   finishedProduct Product       @relation("MoFinishedProduct", fields: [finishedProductId], references: [id])
   bom             Bom?          @relation(fields: [bomId], references: [id])
   assignee        User?         @relation("Assignee", fields: [assigneeId], references: [id])
+  creator         User          @relation("ManufacturingOrderCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   components      MoComponent[]
   workOrders      MoWorkOrder[]
 

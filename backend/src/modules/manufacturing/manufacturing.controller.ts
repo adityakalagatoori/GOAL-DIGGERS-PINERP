@@ -6,7 +6,7 @@ export async function listManufacturingOrdersHandler(req: Request, res: Response
 }
 
 export async function getManufacturingOrderHandler(req: Request, res: Response) {
-  res.json(await mfgService.getManufacturingOrder(Number(req.params.id)));
+  res.json(await mfgService.getManufacturingOrder(Number(req.params.id), req.user?.userId));
 }
 
 export async function createManufacturingOrderHandler(req: Request, res: Response) {

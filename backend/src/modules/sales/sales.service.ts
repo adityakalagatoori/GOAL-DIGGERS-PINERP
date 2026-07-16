@@ -64,9 +64,10 @@ export async function listSalesOrders(search?: string, status?: string) {
   });
 }
 
-export async function getSalesOrder(id: number) {
+export async function getSalesOrder(id: number, userId?: number) {
   const so = await prisma.salesOrder.findUnique({ where: { id }, include: includeAll });
   if (!so) throw new AppError(404, "Sales order not found");
+  if (userId && so.createdBy !== userId) throw new AppError(403, "You do not have access to this sales order");
 
   // `includeAll`'s nested `product: true` is a raw Prisma fetch — it has no
   // freeToUseQty (that's only computed by products.service's withComputedQty).
@@ -122,6 +123,7 @@ export async function createSalesOrder(data: CreateInput, userId?: number) {
       customerId: data.customerId,
       customerAddress: data.customerAddress,
       salesPersonId: data.salesPersonId,
+      createdBy: userId || 1,
       dueDate: data.dueDate,
       status: "draft",
       lines: { create: lines },
@@ -141,6 +143,9 @@ export async function updateSalesOrder(id: number, data: Partial<CreateInput>, u
   if (!existing) throw new AppError(404, "Sales order not found");
   if (existing.status !== "draft") {
     throw new AppError(400, "Only a Draft sales order can be edited");
+  }
+  if (userId && existing.createdBy !== userId) {
+    throw new AppError(403, "Only the order creator can edit this sales order");
   }
 
   return prisma.$transaction(async (tx) => {
@@ -170,9 +175,13 @@ export async function updateSalesOrder(id: number, data: Partial<CreateInput>, u
 
 export async function deleteSalesOrder(id: number, userId?: number) {
   const existing = await prisma.salesOrder.findUnique({ where: { id } });
+  if (!existing) throw new AppError(404, "Sales order not found");
+  if (userId && existing.createdBy !== userId) {
+    throw new AppError(403, "Only the order creator can delete this sales order");
+  }
   await prisma.salesOrder.delete({ where: { id } });
   await prisma.auditLog.create({
-    data: { module: "sales", entity: "SalesOrder", recordId: id, recordRef: existing?.reference, action: "deleted", userId },
+    data: { module: "sales", entity: "SalesOrder", recordId: id, recordRef: existing.reference, action: "deleted", userId },
   });
 }
 

@@ -15,7 +15,7 @@ export async function listPurchaseOrdersHandler(req: Request, res: Response) {
 }
 
 export async function getPurchaseOrderHandler(req: Request, res: Response) {
-  res.json(await purchaseService.getPurchaseOrder(Number(req.params.id)));
+  res.json(await purchaseService.getPurchaseOrder(Number(req.params.id), req.user?.userId));
 }
 
 export async function createPurchaseOrderHandler(req: Request, res: Response) {
