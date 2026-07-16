@@ -70,7 +70,7 @@ async function buildUserResponse(user: User) {
 
 
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
+const LOCKOUT_SECONDS = 30;
 
 export async function login(loginId: string, password: string, meta?: { ip?: string; browser?: string }) {
   const user = await prisma.user.findUnique({ where: { loginId } });
@@ -90,8 +90,8 @@ export async function login(loginId: string, password: string, meta?: { ip?: str
   // Check account lockout
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     await prisma.loginHistory.create({ data: { userId: user.id, ip: meta?.ip, browser: meta?.browser, status: "locked" } });
-    const mins = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
-    throw new AppError(423, `Account is locked. Try again in ${mins} minute(s).`);
+    const secs = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
+    throw new AppError(423, `Account is locked. Try again in ${secs} second(s).`);
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -102,12 +102,12 @@ export async function login(loginId: string, password: string, meta?: { ip?: str
       where: { id: user.id },
       data: {
         failedLoginAttempts: newCount,
-        lockedUntil: shouldLock ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) : null,
+        lockedUntil: shouldLock ? new Date(Date.now() + LOCKOUT_SECONDS * 1000) : null,
       },
     });
     await prisma.loginHistory.create({ data: { userId: user.id, ip: meta?.ip, browser: meta?.browser, status: "failed" } });
     if (shouldLock) {
-      throw new AppError(423, `Too many failed attempts. Account locked for ${LOCKOUT_MINUTES} minutes.`);
+      throw new AppError(423, `Too many failed attempts. Account locked for ${LOCKOUT_SECONDS} seconds.`);
     }
     throw new AppError(401, `Invalid login ID or password. ${MAX_FAILED_ATTEMPTS - newCount} attempt(s) remaining.`);
   }
