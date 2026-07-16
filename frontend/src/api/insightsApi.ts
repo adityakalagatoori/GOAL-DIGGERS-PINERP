@@ -6,6 +6,7 @@ export interface ForecastResult {
   suggestedReorderQty: number | null;
   insufficientData: boolean;
   insight?: string;
+  model: { slope: number; intercept: number; rSquared: number; trend: string; confidence: string } | null;
 }
 
 export interface ParetoResult {
@@ -31,4 +32,40 @@ export function getParetoAnalysis() {
 
 export function getBatchPurchaseSuggestions() {
   return apiFetch<BatchPurchaseSuggestion[]>('/api/insights/batch-purchase-suggestions');
+}
+
+export interface VendorScore {
+  vendorId: number;
+  vendorName: string;
+  unitPrice: number;
+  leadTimeDays: number;
+  incidentCount: number;
+  priceScore: number;
+  speedScore: number;
+  reliabilityScore: number;
+  totalScore: number;
+}
+
+export interface ProcurementRecommendation {
+  productId: number;
+  productName: string;
+  onHandQty: number;
+  reorderThreshold: number;
+  shortfall: number;
+  candidates: VendorScore[];
+  recommendedVendor: VendorScore | null;
+  reasoning: string;
+}
+
+export interface OptimizationRun {
+  steps: { step: string; detail: string }[];
+  recommendations: ProcurementRecommendation[];
+}
+
+export function runProcurementOptimization() {
+  return apiFetch<OptimizationRun>('/api/insights/optimize-procurement');
+}
+
+export function applyOptimizationRecommendation(productId: number) {
+  return apiFetch(`/api/insights/optimize-procurement/${productId}/apply`, { method: 'POST' });
 }
