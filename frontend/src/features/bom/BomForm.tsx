@@ -142,7 +142,7 @@ export function BomForm() {
                     const next = [...components]; next[i] = { ...c, componentId: Number(e.target.value) }; setComponents(next);
                   }}>
                     <option value="">Select component...</option>
-                    {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {products.filter((p) => p.id !== productId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                   <input type="number" className="w-28 border border-border rounded px-2 py-2 text-sm" placeholder="Qty" value={c.toConsumeQty} onChange={(e) => {
                     const next = [...components]; next[i] = { ...c, toConsumeQty: Number(e.target.value) }; setComponents(next);
