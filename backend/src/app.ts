@@ -37,6 +37,12 @@ import { sessionsRouter } from "./modules/sessions/sessions.routes";
 export function createApp(): Express {
   const app = express();
 
+  // Render (and most PaaS hosts) sit behind a reverse proxy that sets
+  // X-Forwarded-For. Without this, express-rate-limit throws
+  // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request since it can't
+  // trust the header to identify the real client IP.
+  app.set("trust proxy", 1);
+
   // This is a pure JSON API (the React app is served separately by Vite), so
   // the default CSP would only fight itself — disable it. Keep the other
   // protections: no X-Powered-By, frameguard, noSniff, HSTS in prod. Uploaded
