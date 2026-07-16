@@ -154,8 +154,7 @@ npx prisma db push --accept-data-loss
 npm run seed
 ```
 
-This creates demo users, products, vendors, sales/purchase/manufacturing history, etc.
-**Demo login:** any seeded `loginId` + password `Demo@1234`. Admin account: `admin` / `Demo@1234`.
+This creates demo users, products, vendors, sales/purchase/manufacturing history, etc., each with password `Demo@1234` — this only applies to a **fresh local database you seeded yourself** with the command above. It is not a valid credential against any hosted/deployed instance of this app; production admin credentials are rotated separately and are never committed to this repo.
 
 ### 8. Run the app (development)
 
@@ -187,10 +186,6 @@ npm run prisma:migrate # create a new migration during development
 - **Frontend** deploys cleanly to Vercel/Netlify as a static Vite build (`npm run build` → `dist/`). Set `VITE_API_BASE_URL` to your deployed backend's URL as an environment variable on the hosting platform, then rebuild.
 - **Backend** needs a platform that runs a persistent Node process (it holds a MySQL connection pool and a Socket.io WebSocket server) — Vercel's serverless functions do not support this. Use Railway, Render, Fly.io, or a VPS instead. Set the same environment variables as `backend/.env` above (with production values, including `NODE_ENV=production`, a real `FRONTEND_URL`, and a managed MySQL database URL), then run `npx prisma migrate deploy` once during deploy before starting the server.
 - In production, session cookies switch to `SameSite=None; Secure`, which requires the deployed site to be served over HTTPS.
-
-ADMIN CREDENTIALS - admin 
-password - Demo@1234
-
 
 **Project Structure**
 
