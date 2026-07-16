@@ -42,6 +42,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
       res.status(400).json({ error: "Referenced record does not exist", details: err.meta });
       return;
     }
+    // eslint-disable-next-line no-console
+    console.error(err);
     res.status(500).json({ error: "Database error", code: err.code });
     return;
   }
