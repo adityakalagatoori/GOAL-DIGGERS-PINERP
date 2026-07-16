@@ -3,6 +3,12 @@
 PINERP is an explainable, intelligence-first ERP designed for growing manufacturers that cannot afford enterprise consultants but still need enterprise-level visibility.
 Traditional ERPs tell businesses what happened. PINERP tells them what is happening, why it is happening, and what they should do next.
 
+**Live Demo**
+
+- App: https://goal-diggers-pinerp.vercel.app
+- Demo Admin Login — `Login ID: admin` / `Password: PinERP-x9ngeghr!Xz9`
+- These are intentionally published test credentials for judges and other teams to access the live deployment during the event — not a secret leak. Treat this account as the one in-scope for testing per event rules.
+
 **Contributors**
 jaya mouthikhan 
 preenithi
