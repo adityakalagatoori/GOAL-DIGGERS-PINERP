@@ -13,7 +13,14 @@ insightsRouter.use(authMiddleware);
 insightsRouter.get("/forecast/:productId", async (req, res) => res.json(await getForecast(Number(req.params.productId))));
 insightsRouter.get("/pareto", async (req, res) => res.json(await getParetoAnalysis()));
 insightsRouter.get("/batch-purchase-suggestions", async (req, res) => res.json(await getBatchPurchaseSuggestions()));
-insightsRouter.get("/optimize-procurement", async (req, res) => res.json(await runProcurementOptimization()));
+insightsRouter.get("/optimize-procurement", async (req, res) => {
+  const { priceWeight, speedWeight, reliabilityWeight } = req.query;
+  const weights =
+    priceWeight || speedWeight || reliabilityWeight
+      ? { price: Number(priceWeight) || 0, speed: Number(speedWeight) || 0, reliability: Number(reliabilityWeight) || 0 }
+      : undefined;
+  res.json(await runProcurementOptimization(weights));
+});
 insightsRouter.post("/optimize-procurement/:productId/apply", async (req, res) =>
-  res.json(await applyOptimizationRecommendation(Number(req.params.productId), req.user!.userId))
+  res.json(await applyOptimizationRecommendation(Number(req.params.productId), req.user!.userId, req.body?.weights))
 );

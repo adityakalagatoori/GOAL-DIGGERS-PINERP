@@ -4,7 +4,26 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Badge } from '../../components/ui/Badge';
 import type { Product } from '../../types';
 import { listProducts } from '../../api/productApi';
-import { getForecast, getParetoAnalysis, getBatchPurchaseSuggestions, runProcurementOptimization, applyOptimizationRecommendation, type ForecastResult, type ParetoResult, type BatchPurchaseSuggestion, type OptimizationRun } from '../../api/insightsApi';
+import { getForecast, getParetoAnalysis, getBatchPurchaseSuggestions, runProcurementOptimization, applyOptimizationRecommendation, type ForecastResult, type ParetoResult, type BatchPurchaseSuggestion, type OptimizationRun, type OptimizationWeights } from '../../api/insightsApi';
+
+/** Mirrors backend's fitLinearRegression (forecastingEngine.ts) exactly, so
+ * the What-If simulator can fit instantly client-side as the user types —
+ * no network round trip, same OLS math as the real model. */
+function fitLinearRegressionClientSide(points: { x: number; y: number }[]) {
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumXX = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  const slope = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const meanY = sumY / n;
+  const ssTot = points.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssRes = points.reduce((s, p) => s + (p.y - (slope * p.x + intercept)) ** 2, 0);
+  const rSquared = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
+  return { slope: Number(slope.toFixed(2)), intercept: Number(intercept.toFixed(2)), rSquared: Number(rSquared.toFixed(3)) };
+}
 
 export function Insights() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -15,6 +34,9 @@ export function Insights() {
   const [optimization, setOptimization] = useState<OptimizationRun | null>(null);
   const [optimizing, setOptimizing] = useState(false);
   const [applyingId, setApplyingId] = useState<number | null>(null);
+  const [weights, setWeights] = useState<OptimizationWeights>({ price: 0.4, speed: 0.35, reliability: 0.25 });
+
+  const [simData, setSimData] = useState<number[]>([80, 85, 78, 92, 88, 95]);
 
   useEffect(() => {
     listProducts().then((p) => {
@@ -31,10 +53,10 @@ export function Insights() {
 
   const chartData = forecast ? [...forecast.history, ...forecast.forecast.map((f) => ({ ...f, projected: true }))] : [];
 
-  const runOptimizer = async () => {
+  const runOptimizer = async (w: OptimizationWeights = weights) => {
     setOptimizing(true);
     try {
-      const result = await runProcurementOptimization();
+      const result = await runProcurementOptimization(w);
       setOptimization(result);
     } catch (e) {
       console.error(e);
@@ -46,7 +68,7 @@ export function Insights() {
   const applyRecommendation = async (productId: number) => {
     setApplyingId(productId);
     try {
-      await applyOptimizationRecommendation(productId);
+      await applyOptimizationRecommendation(productId, weights);
       await runOptimizer();
     } catch (e) {
       console.error(e);
@@ -54,6 +76,22 @@ export function Insights() {
       setApplyingId(null);
     }
   };
+
+  const updateWeight = (key: keyof OptimizationWeights, value: number) => {
+    const next = { ...weights, [key]: value };
+    setWeights(next);
+    if (optimization) runOptimizer(next);
+  };
+
+  // Live client-side fit — recomputes on every keystroke, no network call,
+  // proves the model is a real formula responding to whatever you type.
+  const simPoints = simData.map((qty, i) => ({ x: i, y: qty }));
+  const simModel = simData.length >= 2 ? fitLinearRegressionClientSide(simPoints) : null;
+  const simForecastNext = simModel ? Math.max(0, Math.round(simModel.slope * simData.length + simModel.intercept)) : null;
+  const simChartData = [
+    ...simData.map((qty, i) => ({ period: `M${i + 1}`, qty })),
+    ...(simForecastNext !== null ? [{ period: `M${simData.length + 1}`, qty: simForecastNext, projected: true }] : []),
+  ];
 
   return (
     <div className="space-y-6">
@@ -118,6 +156,77 @@ export function Insights() {
           </CardContent>
         </Card>
 
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>What-If Forecast Simulator</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-foreground/60 mb-4">
+              Type any monthly sales numbers below — the regression model refits instantly on every keystroke, live in your browser.
+              This is the exact same OLS math as the Demand Forecasting model above, just running on data you control instead of the seeded dataset.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {simData.map((qty, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <label className="text-xs text-foreground/50 mb-1">M{i + 1}</label>
+                  <input
+                    type="number"
+                    value={qty}
+                    onChange={(e) => {
+                      const next = [...simData];
+                      next[i] = Number(e.target.value) || 0;
+                      setSimData(next);
+                    }}
+                    className="w-16 border border-border rounded px-2 py-1 text-sm text-center"
+                  />
+                </div>
+              ))}
+              <div className="flex flex-col justify-end gap-1">
+                <button onClick={() => setSimData([...simData, 50])} className="px-2 py-1 text-xs rounded bg-secondary hover:bg-secondary/70">+ Month</button>
+                {simData.length > 2 && (
+                  <button onClick={() => setSimData(simData.slice(0, -1))} className="px-2 py-1 text-xs rounded bg-secondary hover:bg-secondary/70">- Month</button>
+                )}
+              </div>
+            </div>
+
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={simChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="qty" stroke="#9333EA" strokeWidth={3} dot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {simModel && (
+              <div className="mt-4 grid grid-cols-4 gap-2">
+                <div className="p-2 bg-secondary rounded-lg text-center">
+                  <div className="text-xs text-foreground/50">Slope</div>
+                  <div className="text-sm font-semibold">{simModel.slope}/mo</div>
+                </div>
+                <div className="p-2 bg-secondary rounded-lg text-center">
+                  <div className="text-xs text-foreground/50">Intercept</div>
+                  <div className="text-sm font-semibold">{simModel.intercept}</div>
+                </div>
+                <div className="p-2 bg-secondary rounded-lg text-center">
+                  <div className="text-xs text-foreground/50">R²</div>
+                  <div className="text-sm font-semibold">{simModel.rSquared}</div>
+                </div>
+                <div className="p-2 bg-primary/10 rounded-lg text-center">
+                  <div className="text-xs text-foreground/50">Next Month</div>
+                  <div className="text-sm font-semibold text-primary">{simForecastNext} units</div>
+                </div>
+              </div>
+            )}
+            <p className="mt-3 text-xs text-foreground/50 font-mono">
+              y = {simModel?.slope ?? 0}x + {simModel?.intercept ?? 0} — fit live via least-squares on the {simData.length} points above
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Pareto Analysis (Profit)</CardTitle>
@@ -178,7 +287,7 @@ export function Insights() {
             <div className="flex items-center justify-between">
               <CardTitle>AI Procurement Optimization Agent</CardTitle>
               <button
-                onClick={runOptimizer}
+                onClick={() => runOptimizer()}
                 disabled={optimizing}
                 className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium disabled:opacity-50"
               >
@@ -192,6 +301,25 @@ export function Insights() {
               price / speed / reliability model computed from live vendor offers and real quality-incident history,
               then recommends (and can execute) the optimal purchase.
             </p>
+
+            <div className="mb-5 p-4 bg-secondary rounded-xl space-y-3">
+              <p className="text-xs font-medium text-foreground/60 uppercase tracking-wide">Adjust priorities — recommendation recomputes live</p>
+              {(['price', 'speed', 'reliability'] as const).map((key) => (
+                <div key={key} className="flex items-center gap-3">
+                  <span className="w-24 text-sm capitalize">{key}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={weights[key]}
+                    onChange={(e) => updateWeight(key, Number(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className="w-12 text-sm text-right font-mono">{(weights[key] * 100).toFixed(0)}%</span>
+                </div>
+              ))}
+            </div>
 
             {!optimization && !optimizing && (
               <p className="text-sm text-foreground/60 p-4 text-center">Click "Run Optimization" to start the agent.</p>

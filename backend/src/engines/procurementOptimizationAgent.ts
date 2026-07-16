@@ -23,7 +23,13 @@ const prisma = new PrismaClient();
  * auditable — this is not a black box.
  */
 
-const WEIGHTS = { price: 0.4, speed: 0.35, reliability: 0.25 };
+const DEFAULT_WEIGHTS = { price: 0.4, speed: 0.35, reliability: 0.25 };
+
+export interface OptimizationWeights {
+  price: number;
+  speed: number;
+  reliability: number;
+}
 
 interface VendorScore {
   vendorId: number;
@@ -53,8 +59,19 @@ export interface OptimizationRun {
   recommendations: ProductRecommendation[];
 }
 
-export async function runProcurementOptimization(): Promise<OptimizationRun> {
+export async function runProcurementOptimization(customWeights?: Partial<OptimizationWeights>): Promise<OptimizationRun> {
+  // Normalize so caller-supplied weights (e.g. from UI sliders) always sum
+  // to 1 even if the three inputs don't add up cleanly — the scoring math
+  // assumes a normalized weight vector.
+  const raw = { ...DEFAULT_WEIGHTS, ...customWeights };
+  const sum = raw.price + raw.speed + raw.reliability;
+  const WEIGHTS = sum > 0 ? { price: raw.price / sum, speed: raw.speed / sum, reliability: raw.reliability / sum } : DEFAULT_WEIGHTS;
+
   const steps: OptimizationRun["steps"] = [];
+  steps.push({
+    step: "configure",
+    detail: `Using weights — price: ${(WEIGHTS.price * 100).toFixed(0)}%, speed: ${(WEIGHTS.speed * 100).toFixed(0)}%, reliability: ${(WEIGHTS.reliability * 100).toFixed(0)}%.`,
+  });
 
   // STEP 1 — PERCEIVE: find products below their reorder threshold
   const products = await prisma.product.findMany({
@@ -169,8 +186,8 @@ export async function runProcurementOptimization(): Promise<OptimizationRun> {
 }
 
 /** Executes the agent's recommendation for one product — actually creates the PO, not just a suggestion. */
-export async function applyOptimizationRecommendation(productId: number, userId: number) {
-  const run = await runProcurementOptimization();
+export async function applyOptimizationRecommendation(productId: number, userId: number, customWeights?: Partial<OptimizationWeights>) {
+  const run = await runProcurementOptimization(customWeights);
   const rec = run.recommendations.find((r) => r.productId === productId);
   if (!rec || !rec.recommendedVendor) {
     throw new Error("No recommendation available for this product");

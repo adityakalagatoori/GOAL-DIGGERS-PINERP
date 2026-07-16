@@ -62,10 +62,17 @@ export interface OptimizationRun {
   recommendations: ProcurementRecommendation[];
 }
 
-export function runProcurementOptimization() {
-  return apiFetch<OptimizationRun>('/api/insights/optimize-procurement');
+export interface OptimizationWeights {
+  price: number;
+  speed: number;
+  reliability: number;
 }
 
-export function applyOptimizationRecommendation(productId: number) {
-  return apiFetch(`/api/insights/optimize-procurement/${productId}/apply`, { method: 'POST' });
+export function runProcurementOptimization(weights?: OptimizationWeights) {
+  const qs = weights ? `?priceWeight=${weights.price}&speedWeight=${weights.speed}&reliabilityWeight=${weights.reliability}` : '';
+  return apiFetch<OptimizationRun>(`/api/insights/optimize-procurement${qs}`);
+}
+
+export function applyOptimizationRecommendation(productId: number, weights?: OptimizationWeights) {
+  return apiFetch(`/api/insights/optimize-procurement/${productId}/apply`, { method: 'POST', body: { weights } });
 }
