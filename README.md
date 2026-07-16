@@ -79,8 +79,114 @@ Tier A Customer Portal — isolated external login (separate from internal RBAC)
 
 **Setup Instructions**
 
+### Prerequisites
 
+- Node.js 18+ and npm
+- MySQL Server 8+ running locally (or a reachable MySQL instance)
+- A MySQL user with permission to create databases (e.g. `root`)
 
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/jayamouthikhan2006/GOAL-DIGGERS-PINERP.git
+cd GOAL-DIGGERS-PINERP
+```
+
+### 2. Create the database
+
+```bash
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS pinerp_db;"
+```
+
+### 3. Configure backend environment variables
+
+Create `backend/.env` (copy `backend/.env.example` as a starting point) with:
+
+```
+DATABASE_URL="mysql://root:<your-mysql-password>@localhost:3306/pinerp_db"
+JWT_INTERNAL_SECRET="<any-long-random-string>"
+JWT_PORTAL_SECRET="<a-different-long-random-string>"
+LLM_NARRATION_ENABLED=false
+ANTHROPIC_API_KEY=""
+PORT=4000
+SMTP_USER=""
+SMTP_APP_PASSWORD=""
+FRONTEND_URL="http://localhost:5173"
+```
+
+**Important:** if your MySQL password contains special characters (`@`, `#`, `%`, etc.), percent-encode them in `DATABASE_URL` — `@` becomes `%40`. Example: a password `Pass@123` becomes `mysql://root:Pass%40123@localhost:3306/pinerp_db`. An un-encoded `@` in the password is parsed as the host separator and the connection will fail.
+
+### 4. Configure frontend environment variables
+
+Create `frontend/.env` with:
+
+```
+VITE_API_BASE_URL="http://localhost:4000"
+```
+
+### 5. Install dependencies
+
+```bash
+cd backend && npm install
+cd ../frontend && npm install
+```
+
+### 6. Set up the database schema
+
+From `backend/`:
+
+```bash
+npx prisma generate
+npx prisma migrate deploy
+```
+
+If you see `Database schema is up to date!` but the app errors with a missing table (schema drift between `schema.prisma` and the committed migrations), reset and sync directly instead:
+
+```bash
+npx prisma db push --accept-data-loss
+```
+
+(Only run this against a fresh/empty dev database — it can drop and recreate tables.)
+
+### 7. Seed demo data
+
+```bash
+npm run seed
+```
+
+This creates demo users, products, vendors, sales/purchase/manufacturing history, etc.
+**Demo login:** any seeded `loginId` + password `Demo@1234`. Admin account: `admin` / `Demo@1234`.
+
+### 8. Run the app (development)
+
+In two separate terminals:
+
+```bash
+# Terminal 1 — backend (http://localhost:4000)
+cd backend
+npm run dev
+
+# Terminal 2 — frontend (http://localhost:5173)
+cd frontend
+npm run dev
+```
+
+Open **http://localhost:5173** in your browser.
+
+### 9. Useful backend scripts
+
+```bash
+npm run build          # compile TypeScript
+npm start              # run the compiled build
+npm run prisma:studio  # visual DB browser at http://localhost:5555
+npm run prisma:migrate # create a new migration during development
+```
+
+### Deployment
+
+- **Frontend** deploys cleanly to Vercel/Netlify as a static Vite build (`npm run build` → `dist/`). Set `VITE_API_BASE_URL` to your deployed backend's URL as an environment variable on the hosting platform, then rebuild.
+- **Backend** needs a platform that runs a persistent Node process (it holds a MySQL connection pool and a Socket.io WebSocket server) — Vercel's serverless functions do not support this. Use Railway, Render, Fly.io, or a VPS instead. Set the same environment variables as `backend/.env` above (with production values, including `NODE_ENV=production`, a real `FRONTEND_URL`, and a managed MySQL database URL), then run `npx prisma migrate deploy` once during deploy before starting the server.
+- In production, session cookies switch to `SameSite=None; Secure`, which requires the deployed site to be served over HTTPS.
 
 
 
