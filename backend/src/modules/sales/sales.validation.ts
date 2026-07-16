@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pinActionSchema } from "../pin/pin.validation";
+import { futureOrTodayDate } from "../../validation/dateFields";
 
 const lineSchema = z.object({
   productId: z.coerce.number().int().positive(),
@@ -11,7 +12,7 @@ export const createSalesOrderSchema = z.object({
   customerId: z.coerce.number().int().positive(),
   customerAddress: z.string().optional(),
   salesPersonId: z.coerce.number().int().positive().optional(),
-  dueDate: z.coerce.date().optional(),
+  dueDate: futureOrTodayDate,
   lines: z.array(lineSchema).min(1, "At least one product line is required"),
 });
 
@@ -21,7 +22,7 @@ export const updateSalesOrderSchema = z.object({
   customerId: z.coerce.number().int().positive().optional(),
   customerAddress: z.string().optional(),
   salesPersonId: z.coerce.number().int().positive().optional(),
-  dueDate: z.coerce.date().optional(),
+  dueDate: futureOrTodayDate,
   lines: z.array(lineSchema).optional(),
 });
 

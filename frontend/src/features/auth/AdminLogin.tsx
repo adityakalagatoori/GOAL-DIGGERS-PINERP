@@ -13,12 +13,14 @@ export function AdminLogin() {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoggingIn(true);
     try {
       // Admin-ness is a property of the account, not a request flag — the
       // backend has one /api/auth/login endpoint for both; we just verify
@@ -31,12 +33,14 @@ export function AdminLogin() {
         // silently authenticated while the screen claims the login failed.
         await logoutApi();
         setError('This account is not a System Administrator. Use the regular login.');
+        setIsLoggingIn(false);
         return;
       }
       login(user);
       navigate('/');
     } catch (err) {
       setError(err instanceof ApiError ? extractApiErrorMessage(err) : 'Invalid Admin credentials');
+      setIsLoggingIn(false);
     }
   };
 

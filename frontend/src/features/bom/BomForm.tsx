@@ -26,6 +26,7 @@ export function BomForm() {
   const [workOrders, setWorkOrders] = useState<DraftWorkOrder[]>([]);
   const [activeTab, setActiveTab] = useState<'components' | 'workOrders'>('components');
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     listProducts().then(setProducts).catch(console.error);
@@ -49,6 +50,7 @@ export function BomForm() {
       setError('Finished Product, at least one component, and at least one operation are required.');
       return;
     }
+    setIsSaving(true);
     try {
       if (isNew) {
         await createBom({ productId, quantity, shortReference: shortReference || undefined, components, workOrderTemplates: workOrders });
@@ -58,6 +60,7 @@ export function BomForm() {
       navigate('/bom');
     } catch (e) {
       setError(e instanceof ApiError ? extractApiErrorMessage(e) : 'Save failed');
+      setIsSaving(false);
     }
   };
 
@@ -69,7 +72,7 @@ export function BomForm() {
       auditModule="manufacturing"
       auditEntity="Bom"
       auditRecordId={!isNew ? Number(id) : undefined}
-      actions={<Button onClick={handleSave}>Save</Button>}
+      actions={<Button onClick={handleSave} loading={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>}
     >
       <div className="p-6 space-y-6">
         {isNew && (

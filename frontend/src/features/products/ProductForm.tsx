@@ -21,6 +21,7 @@ export function ProductForm() {
   const [error, setError] = useState('');
   const [reconcileQty, setReconcileQty] = useState(0);
   const [reconcileReason, setReconcileReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { canEdit: canEditPrice } = usePermission('product', 'Sales Price');
@@ -39,6 +40,7 @@ export function ProductForm() {
   if (!product) return <div>Loading...</div>;
 
   const handleSave = async () => {
+    setIsSaving(true);
     try {
       const payload = {
         name: product.name,
@@ -54,6 +56,7 @@ export function ProductForm() {
       navigate('/products');
     } catch (e) {
       setError(e instanceof ApiError ? extractApiErrorMessage(e) : 'Save failed');
+      setIsSaving(false);
     }
   };
 
@@ -91,7 +94,7 @@ export function ProductForm() {
       onBack={() => navigate('/products')}
       auditModule="product"
       auditRecordId={!isNew ? product.id : undefined}
-      actions={<Button onClick={handleSave}>Save</Button>}
+      actions={<Button onClick={handleSave} loading={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>}
     >
       <div className="p-6 space-y-6">
         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 rounded-lg">{error}</div>}

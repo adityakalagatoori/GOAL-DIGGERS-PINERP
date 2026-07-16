@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { futureOrTodayDate } from "../../validation/dateFields";
 
 const lineSchema = z.object({
   productId: z.coerce.number().int().positive(),
@@ -10,7 +11,7 @@ export const createPurchaseOrderSchema = z.object({
   vendorId: z.coerce.number().int().positive(),
   vendorAddress: z.string().optional(),
   responsiblePersonId: z.coerce.number().int().positive().optional(),
-  dueDate: z.coerce.date().optional(),
+  dueDate: futureOrTodayDate,
   lines: z.array(lineSchema).min(1, "At least one product line is required"),
 });
 
@@ -18,7 +19,7 @@ export const updatePurchaseOrderSchema = z.object({
   vendorId: z.coerce.number().int().positive().optional(),
   vendorAddress: z.string().optional(),
   responsiblePersonId: z.coerce.number().int().positive().optional(),
-  dueDate: z.coerce.date().optional(),
+  dueDate: futureOrTodayDate,
   lines: z.array(lineSchema).optional(),
 });
 

@@ -13,12 +13,14 @@ export function Login() {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoggingIn(true);
     try {
       // Mirrors AdminLogin's same check in the other direction — an Admin
       // account belongs on the Admin Login screen, not here, so the two
@@ -27,12 +29,14 @@ export function Login() {
       if (user.isAdmin) {
         await logoutApi();
         setError('This account is a System Administrator. Use Admin Login instead.');
+        setIsLoggingIn(false);
         return;
       }
       login(user);
       navigate('/');
     } catch (err) {
       setError(err instanceof ApiError ? extractApiErrorMessage(err) : 'Invalid credentials');
+      setIsLoggingIn(false);
     }
   };
 
@@ -65,8 +69,8 @@ export function Login() {
 
               {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 rounded-lg">{error}</div>}
 
-              <Button type="submit" className="w-full" size="lg">
-                Sign In
+              <Button type="submit" className="w-full" size="lg" loading={isLoggingIn}>
+                {isLoggingIn ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
           </CardContent>

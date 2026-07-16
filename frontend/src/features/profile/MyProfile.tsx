@@ -15,6 +15,7 @@ export function MyProfile() {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export function MyProfile() {
   if (!user) return <div>Loading...</div>;
 
   const handleSave = async () => {
+    setIsSaving(true);
     try {
       const updated = await updateMe({ name: user.name, address: user.address ?? undefined, mobile: user.mobile ?? undefined });
       setUser(updated);
@@ -32,6 +34,8 @@ export function MyProfile() {
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Save failed');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -60,7 +64,7 @@ export function MyProfile() {
   const photoUrl = resolvePhotoUrl(user.photoUrl);
 
   return (
-    <FormView title="My Profile" actions={<Button onClick={handleSave}>Save</Button>}>
+    <FormView title="My Profile" actions={<Button onClick={handleSave} loading={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>}>
       <div className="p-6 space-y-6 max-w-xl">
         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 rounded-lg">{error}</div>}
         {saved && <div className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 p-3 rounded-lg">Profile updated.</div>}

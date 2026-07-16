@@ -1,16 +1,17 @@
 import { z } from "zod";
+import { futureOrTodayDate } from "../../validation/dateFields";
 
 export const createManufacturingOrderSchema = z.object({
   finishedProductId: z.coerce.number().int().positive(),
   quantity: z.coerce.number().positive(),
   bomId: z.coerce.number().int().positive().optional(),
-  scheduleDate: z.coerce.date().optional(),
+  scheduleDate: futureOrTodayDate,
   assigneeId: z.coerce.number().int().positive().optional(),
 });
 
 export const updateManufacturingOrderSchema = z.object({
   quantity: z.coerce.number().positive().optional(),
-  scheduleDate: z.coerce.date().optional(),
+  scheduleDate: futureOrTodayDate,
   assigneeId: z.coerce.number().int().positive().optional(),
 });
 

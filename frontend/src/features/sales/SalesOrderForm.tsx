@@ -32,6 +32,7 @@ export function SalesOrderForm() {
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [error, setError] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
   const [newProductId, setNewProductId] = useState<number | ''>('');
   const [newQty, setNewQty] = useState(1);
 
@@ -55,11 +56,14 @@ export function SalesOrderForm() {
   const isOverdue = order.status === 'confirmed' || order.status === 'partially_delivered';
 
   const run = async (fn: () => Promise<SalesOrder>) => {
+    setIsRunning(true);
     try {
       setOrder(await fn());
       setError('');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Action failed');
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -133,13 +137,13 @@ export function SalesOrderForm() {
                 <AlertCircle className="w-4 h-4" /> Why is this late?
               </Button>
             )}
-            {isNew && <Button onClick={handleSaveNew}>Save</Button>}
+            {isNew && <Button onClick={handleSaveNew} loading={isRunning}>{isRunning ? 'Saving...' : 'Save'}</Button>}
             {!isNew && order.status === 'draft' && <Button onClick={() => setIsPinModalOpen(true)}>Confirm</Button>}
             {!isNew && (order.status === 'confirmed' || order.status === 'partially_delivered') && (
-              <Button onClick={handleDeliver} variant="secondary">Deliver</Button>
+              <Button onClick={handleDeliver} variant="secondary" loading={isRunning}>{isRunning ? 'Delivering...' : 'Deliver'}</Button>
             )}
             {!isNew && order.status !== 'fully_delivered' && order.status !== 'cancelled' && (
-              <Button onClick={() => run(() => cancelSalesOrder(order.id))} variant="ghost" className="text-red-600">Cancel</Button>
+              <Button onClick={() => run(() => cancelSalesOrder(order.id))} variant="ghost" className="text-red-600" loading={isRunning}>Cancel</Button>
             )}
           </>
         }
@@ -189,6 +193,7 @@ export function SalesOrderForm() {
             <Input
               label="Due Date"
               type="date"
+              min={new Date().toISOString().slice(0, 10)}
               value={order.dueDate ? order.dueDate.slice(0, 10) : ''}
               onChange={(e) => setOrder({ ...order, dueDate: e.target.value || null })}
               disabled={isLocked}

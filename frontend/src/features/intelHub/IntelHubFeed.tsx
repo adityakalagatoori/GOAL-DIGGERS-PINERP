@@ -40,6 +40,7 @@ export function IntelHubFeed() {
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [error, setError] = useState('');
+  const [processingId, setProcessingId] = useState<number | null>(null);
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
@@ -68,21 +69,27 @@ export function IntelHubFeed() {
   });
 
   const handleVerify = async (id: number) => {
+    setProcessingId(id);
     try {
       await verifyIntelPost(id, 5);
       refresh();
       getIntelHubLeaderboard().then(setLeaderboard).catch(console.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not verify post');
+    } finally {
+      setProcessingId(null);
     }
   };
 
   const handleReject = async (id: number) => {
+    setProcessingId(id);
     try {
       await rejectIntelPost(id);
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not reject post');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -171,10 +178,10 @@ export function IntelHubFeed() {
 
                     {user?.isAdmin && post.status === 'pending' && (
                       <div className="flex flex-col gap-2 shrink-0">
-                        <Button size="sm" onClick={() => handleVerify(post.id)} className="gap-1.5">
+                        <Button size="sm" onClick={() => handleVerify(post.id)} className="gap-1.5" loading={processingId === post.id}>
                           <CheckCircle2 className="w-3.5 h-3.5" /> Verify
                         </Button>
-                        <Button size="sm" variant="ghost" className="text-red-600 gap-1.5" onClick={() => handleReject(post.id)}>
+                        <Button size="sm" variant="ghost" className="text-red-600 gap-1.5" onClick={() => handleReject(post.id)} loading={processingId === post.id}>
                           <XCircle className="w-3.5 h-3.5" /> Reject
                         </Button>
                       </div>

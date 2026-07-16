@@ -30,6 +30,7 @@ export function ManufacturingOrderForm() {
   const [users, setUsers] = useState<{ id: number; name: string; position?: string | null }[]>([]);
   const [error, setError] = useState('');
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
 
   const { canEdit: canEditProduct } = usePermission('manufacturing', 'Product to Manufacture');
   const { canEdit: canEditQty } = usePermission('manufacturing', 'Product Quantity');
@@ -51,11 +52,14 @@ export function ManufacturingOrderForm() {
   const bomsForProduct = boms.filter((b) => b.productId === order.finishedProductId);
 
   const run = async (fn: () => Promise<ManufacturingOrder>) => {
+    setIsRunning(true);
     try {
       setOrder(await fn());
       setError('');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Action failed');
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -116,13 +120,13 @@ export function ManufacturingOrderForm() {
               <AlertCircle className="w-4 h-4" /> Why is this late?
             </Button>
           )}
-          {isNew && <Button onClick={handleSaveNew}>Save</Button>}
-          {!isNew && order.status === 'draft' && <Button onClick={handleSaveDraft} variant="secondary">Save</Button>}
-          {!isNew && order.status === 'draft' && <Button onClick={() => run(() => confirmManufacturingOrder(order.id))}>Confirm</Button>}
-          {!isNew && order.status === 'confirmed' && <Button onClick={() => run(() => startManufacturingOrder(order.id))} variant="secondary">Start</Button>}
-          {!isNew && order.status === 'in_progress' && <Button onClick={() => run(() => produceManufacturingOrder(order.id))} variant="secondary">Produce</Button>}
+          {isNew && <Button onClick={handleSaveNew} loading={isRunning}>{isRunning ? 'Saving...' : 'Save'}</Button>}
+          {!isNew && order.status === 'draft' && <Button onClick={handleSaveDraft} variant="secondary" loading={isRunning}>{isRunning ? 'Saving...' : 'Save'}</Button>}
+          {!isNew && order.status === 'draft' && <Button onClick={() => run(() => confirmManufacturingOrder(order.id))} loading={isRunning}>Confirm</Button>}
+          {!isNew && order.status === 'confirmed' && <Button onClick={() => run(() => startManufacturingOrder(order.id))} variant="secondary" loading={isRunning}>Start</Button>}
+          {!isNew && order.status === 'in_progress' && <Button onClick={() => run(() => produceManufacturingOrder(order.id))} variant="secondary" loading={isRunning}>Produce</Button>}
           {!isNew && order.status !== 'done' && order.status !== 'cancelled' && (
-            <Button onClick={() => run(() => cancelManufacturingOrder(order.id))} variant="ghost" className="text-red-600">Cancel</Button>
+            <Button onClick={() => run(() => cancelManufacturingOrder(order.id))} variant="ghost" className="text-red-600" loading={isRunning}>Cancel</Button>
           )}
         </>
       }
@@ -160,6 +164,7 @@ export function ManufacturingOrderForm() {
           <Input
             label="Schedule Date"
             type="date"
+            min={new Date().toISOString().slice(0, 10)}
             value={order.scheduleDate ? order.scheduleDate.slice(0, 10) : ''}
             onChange={(e) => setOrder({ ...order, scheduleDate: e.target.value || null })}
             disabled={isLocked}
@@ -183,7 +188,7 @@ export function ManufacturingOrderForm() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-medium text-lg">Components</h3>
-                {canEditComponents && <Button size="sm" variant="secondary" onClick={handleSaveConsumption}>Save Consumption</Button>}
+                {canEditComponents && <Button size="sm" variant="secondary" onClick={handleSaveConsumption} loading={isRunning}>{isRunning ? "Saving..." : "Save Consumption"}</Button>}
               </div>
               <div className="overflow-x-auto border border-border rounded-lg">
                 <table className="w-full text-sm text-left">
@@ -228,7 +233,7 @@ export function ManufacturingOrderForm() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-medium text-lg">Work Orders</h3>
-                {canEditComponents && <Button size="sm" variant="secondary" onClick={handleSaveDurations}>Save Durations</Button>}
+                {canEditComponents && <Button size="sm" variant="secondary" onClick={handleSaveDurations} loading={isRunning}>{isRunning ? "Saving..." : "Save Durations"}</Button>}
               </div>
               <div className="overflow-x-auto border border-border rounded-lg">
                 <table className="w-full text-sm text-left">
