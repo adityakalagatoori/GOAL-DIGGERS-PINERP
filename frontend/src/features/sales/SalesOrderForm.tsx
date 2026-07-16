@@ -13,7 +13,7 @@ import { getSalesOrder, createSalesOrder, confirmSalesOrder, deliverSalesOrder, 
 import type { PinAction } from '../../api/pinApi';
 import { listProducts } from '../../api/productApi';
 import { listCustomers } from '../../api/customerApi';
-import { listUsers } from '../../api/userManagementApi';
+import { listUserDirectory } from '../../api/userManagementApi';
 import { ApiError } from '../../api/client';
 
 const STATUS_LABEL: Record<SalesOrderStatus, string> = {
@@ -41,7 +41,7 @@ export function SalesOrderForm() {
   useEffect(() => {
     listProducts().then(setProducts).catch(console.error);
     listCustomers().then(setCustomers).catch(console.error);
-    listUsers().then((rows) => setUsers(rows.map((u) => ({ id: u.id, name: u.name })))).catch(console.error);
+    listUserDirectory().then(setUsers).catch(console.error);
     if (!isNew) {
       getSalesOrder(Number(id)).then(setOrder).catch((e) => setError(e.message));
     } else {

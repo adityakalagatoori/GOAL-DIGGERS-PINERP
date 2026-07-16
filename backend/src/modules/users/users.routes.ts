@@ -8,7 +8,7 @@ import {
   changeMyPasswordSchema, adminResetPasswordSchema,
 } from "./users.validation";
 import {
-  listUsersHandler, getUserHandler, createUserHandler, updateUserHandler,
+  listUsersHandler, listUserDirectoryHandler, getUserHandler, createUserHandler, updateUserHandler,
   disableUserHandler, enableUserHandler, adminResetPasswordHandler,
   getMeHandler, updateMeHandler, updateMyPhotoHandler,
   changeMyPasswordHandler, generatePasswordHandler,
@@ -18,6 +18,10 @@ import {
 export const usersRouter = Router();
 usersRouter.use(authMiddleware);
 usersRouter.get("/", requireAdmin, listUsersHandler);
+// Any authenticated user: minimal id/name list for "assign to" dropdowns
+// (Sales Person, Responsible Person, etc.) — must be registered before
+// "/:id" or it would be swallowed by that param route.
+usersRouter.get("/directory", listUserDirectoryHandler);
 usersRouter.get("/generate-password", requireAdmin, generatePasswordHandler);
 usersRouter.get("/:id", requireAdmin, getUserHandler);
 usersRouter.post("/", requireAdmin, validateRequest(createUserSchema), createUserHandler);

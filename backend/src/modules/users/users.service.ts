@@ -75,6 +75,22 @@ export async function listUsers(filters: {
   });
 }
 
+/**
+ * Minimal {id, name} list of active users, for populating "assign to"
+ * dropdowns (Sales Person, Responsible Person, etc.) that any authenticated
+ * user needs to see regardless of their own permission grid — listUsers()
+ * above is intentionally admin-only since it exposes full profile data,
+ * but that meant non-admins got a 403 just trying to open a Sales/Purchase/
+ * Manufacturing order and populate this dropdown, silently leaving it empty.
+ */
+export async function listUserDirectory() {
+  return prisma.user.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, position: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 export async function getUserWithPermissions(userId: number) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: SAFE_USER_SELECT });
   if (!user) throw new AppError(404, "User not found");

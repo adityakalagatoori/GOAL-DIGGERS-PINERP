@@ -8,7 +8,7 @@ import type { PurchaseOrder, PurchaseOrderStatus, Product, Vendor } from '../../
 import { getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder, confirmPurchaseOrder, receivePurchaseOrder, cancelPurchaseOrder } from '../../api/purchaseApi';
 import { listProducts } from '../../api/productApi';
 import { listVendors } from '../../api/vendorApi';
-import { listUsers } from '../../api/userManagementApi';
+import { listUserDirectory } from '../../api/userManagementApi';
 import { ApiError } from '../../api/client';
 import { DelayTracerModal } from '../delayTracer/DelayTracerModal';
 import { AlertCircle, Trash2 } from 'lucide-react';
@@ -37,7 +37,7 @@ export function PurchaseOrderForm() {
   useEffect(() => {
     listProducts().then(setProducts).catch(console.error);
     listVendors().then(setVendors).catch(console.error);
-    listUsers().then(setUsers).catch(console.error);
+    listUserDirectory().then(setUsers).catch(console.error);
     if (!isNew) {
       getPurchaseOrder(Number(id)).then(setOrder).catch((e) => setError(e.message));
     } else {

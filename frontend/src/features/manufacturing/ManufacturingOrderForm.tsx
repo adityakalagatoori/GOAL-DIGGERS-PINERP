@@ -11,7 +11,7 @@ import {
 } from '../../api/manufacturingApi';
 import { listProducts } from '../../api/productApi';
 import { listBoms } from '../../api/bomApi';
-import { listUsers } from '../../api/userManagementApi';
+import { listUserDirectory } from '../../api/userManagementApi';
 import { ApiError } from '../../api/client';
 import { DelayTracerModal } from '../delayTracer/DelayTracerModal';
 import { AlertCircle } from 'lucide-react';
@@ -37,7 +37,7 @@ export function ManufacturingOrderForm() {
   useEffect(() => {
     listProducts().then(setProducts).catch(console.error);
     listBoms().then(setBoms).catch(console.error);
-    listUsers().then(setUsers).catch(console.error);
+    listUserDirectory().then(setUsers).catch(console.error);
     if (!isNew) {
       getManufacturingOrder(Number(id)).then(setOrder).catch((e) => setError(e.message));
     } else {

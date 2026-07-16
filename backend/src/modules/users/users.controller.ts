@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import * as svc from "./users.service";
 
+export async function listUserDirectoryHandler(req: Request, res: Response, next: NextFunction) {
+  try { res.json(await svc.listUserDirectory()); } catch (e) { next(e); }
+}
+
 export async function listUsersHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const { search, roleId, departmentId, isActive, branchId } = req.query;

@@ -52,6 +52,7 @@ export function UserForm() {
   const [grid, setGrid] = useState<Record<PermissionModule, Record<string, Permission>>>(buildGrid([]));
   const [activeTab, setActiveTab] = useState<PermissionModule>('sales');
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!isNew) {
@@ -71,6 +72,8 @@ export function UserForm() {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    setError('');
     try {
       const permissions = MODULES.flatMap((m) => Object.values(grid[m.key]));
       if (isNew) {
@@ -82,14 +85,33 @@ export function UserForm() {
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Save failed');
+      setIsSaving(false);
     }
+  };
+
+  /** Toggles `action` for every field in `mod` at once (column select-all). */
+  const toggleColumn = (mod: PermissionModule, action: keyof Permission, value: boolean) => {
+    setGrid((g) => ({
+      ...g,
+      [mod]: Object.fromEntries(
+        Object.entries(g[mod]).map(([field, perm]) => [field, { ...perm, [action]: value }])
+      ),
+    }));
+  };
+
+  /** Toggles every action for a single field at once (row select-all). */
+  const toggleRow = (mod: PermissionModule, field: string, value: boolean) => {
+    setGrid((g) => ({
+      ...g,
+      [mod]: { ...g[mod], [field]: { ...g[mod][field], canCreate: value, canView: value, canEdit: value, canDelete: value } },
+    }));
   };
 
   return (
     <FormView
       title={isNew ? 'New User' : 'User Details'}
       onBack={() => navigate('/users')}
-      actions={<Button onClick={handleSave}>Save</Button>}
+      actions={<Button onClick={handleSave} loading={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>}
     >
       <div className="p-6 space-y-6">
         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 rounded-lg">{error}</div>}
@@ -124,25 +146,59 @@ export function UserForm() {
               <thead className="bg-secondary border-b border-border">
                 <tr>
                   <th className="px-4 py-2">Field</th>
-                  {ACTIONS.map((a) => <th key={a.key} className="px-4 py-2 text-center">{a.label}</th>)}
+                  {ACTIONS.map((a) => {
+                    const fields = MODULE_FIELDS[activeTab];
+                    const checkedCount = fields.filter((f) => (grid[activeTab][f] as any)[a.key]).length;
+                    return (
+                      <th key={a.key} className="px-4 py-2 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span>{a.label}</span>
+                          <input
+                            type="checkbox"
+                            title={`Select all "${a.label}"`}
+                            checked={checkedCount === fields.length}
+                            ref={(el) => { if (el) el.indeterminate = checkedCount > 0 && checkedCount < fields.length; }}
+                            onChange={(e) => toggleColumn(activeTab, a.key, e.target.checked)}
+                            disabled={!!user.isAdmin}
+                          />
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {MODULE_FIELDS[activeTab].map((field) => (
-                  <tr key={field}>
-                    <td className="px-4 py-2">{field}</td>
-                    {ACTIONS.map((a) => (
-                      <td key={a.key} className="px-4 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={(grid[activeTab][field] as any)[a.key]}
-                          onChange={() => toggle(activeTab, field, a.key)}
-                          disabled={!!user.isAdmin}
-                        />
+                {MODULE_FIELDS[activeTab].map((field) => {
+                  const perm = grid[activeTab][field] as any;
+                  const checkedCount = ACTIONS.filter((a) => perm[a.key]).length;
+                  return (
+                    <tr key={field}>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            title="Select all actions for this field"
+                            checked={checkedCount === ACTIONS.length}
+                            ref={(el) => { if (el) el.indeterminate = checkedCount > 0 && checkedCount < ACTIONS.length; }}
+                            onChange={(e) => toggleRow(activeTab, field, e.target.checked)}
+                            disabled={!!user.isAdmin}
+                          />
+                          {field}
+                        </div>
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                      {ACTIONS.map((a) => (
+                        <td key={a.key} className="px-4 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={perm[a.key]}
+                            onChange={() => toggle(activeTab, field, a.key)}
+                            disabled={!!user.isAdmin}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
