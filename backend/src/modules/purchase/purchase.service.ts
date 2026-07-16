@@ -34,9 +34,12 @@ export async function listPurchaseOrders(filters: ListFilters) {
 
   const searchClause = purchaseSearchClause(search);
 
-  const dateClause = dueDateFrom || dueDateTo ? {} : {};
-  if (dueDateFrom) dateClause.dueDate = { ...dateClause.dueDate, gte: new Date(dueDateFrom) };
-  if (dueDateTo) dateClause.dueDate = { ...dateClause.dueDate, lte: new Date(dueDateTo) };
+  const dateClause: Record<string, any> = {};
+  if (dueDateFrom || dueDateTo) {
+    dateClause.dueDate = {};
+    if (dueDateFrom) dateClause.dueDate.gte = new Date(dueDateFrom);
+    if (dueDateTo) dateClause.dueDate.lte = new Date(dueDateTo);
+  }
 
   const ownershipClause = isAdmin && createdBy ? { createdBy } : !isAdmin ? { createdBy: userId } : {};
 

@@ -41,9 +41,12 @@ export async function listManufacturingOrders(filters: ListFilters) {
 
   const searchClause = mfgSearchClause(search);
 
-  const dateClause = scheduleDateFrom || scheduleDateTo ? {} : {};
-  if (scheduleDateFrom) dateClause.scheduleDate = { ...dateClause.scheduleDate, gte: new Date(scheduleDateFrom) };
-  if (scheduleDateTo) dateClause.scheduleDate = { ...dateClause.scheduleDate, lte: new Date(scheduleDateTo) };
+  const dateClause: Record<string, any> = {};
+  if (scheduleDateFrom || scheduleDateTo) {
+    dateClause.scheduleDate = {};
+    if (scheduleDateFrom) dateClause.scheduleDate.gte = new Date(scheduleDateFrom);
+    if (scheduleDateTo) dateClause.scheduleDate.lte = new Date(scheduleDateTo);
+  }
 
   const ownershipClause = isAdmin && createdBy ? { createdBy } : !isAdmin ? { createdBy: userId } : {};
 
