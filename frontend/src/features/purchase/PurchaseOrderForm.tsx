@@ -30,6 +30,7 @@ export function PurchaseOrderForm() {
   const [newProductId, setNewProductId] = useState<number | ''>('');
   const [newQty, setNewQty] = useState(1);
   const [isDelayModalOpen, setIsDelayModalOpen] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
 
   const { canEdit: canEditVendor } = usePermission('purchase', 'Vendor');
   const { canEdit: canEditResponsible } = usePermission('purchase', 'Responsible Person');
@@ -51,11 +52,14 @@ export function PurchaseOrderForm() {
   const canEditLines = !isLocked;
 
   const run = async (fn: () => Promise<PurchaseOrder>) => {
+    setIsRunning(true);
     try {
       setOrder(await fn());
       setError('');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Action failed');
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -143,14 +147,14 @@ export function PurchaseOrderForm() {
               <AlertCircle className="w-4 h-4" /> Why is this late?
             </Button>
           )}
-          {isNew && <Button onClick={handleSaveNew}>Save</Button>}
-          {!isNew && order.status === 'draft' && <Button onClick={handleSaveDraft} variant="secondary">Save</Button>}
-          {!isNew && order.status === 'draft' && <Button onClick={() => run(() => confirmPurchaseOrder(order.id))}>Confirm</Button>}
+          {isNew && <Button onClick={handleSaveNew} loading={isRunning}>{isRunning ? 'Saving...' : 'Save'}</Button>}
+          {!isNew && order.status === 'draft' && <Button onClick={handleSaveDraft} variant="secondary" loading={isRunning}>{isRunning ? 'Saving...' : 'Save'}</Button>}
+          {!isNew && order.status === 'draft' && <Button onClick={() => run(() => confirmPurchaseOrder(order.id))} loading={isRunning}>Confirm</Button>}
           {!isNew && (order.status === 'confirmed' || order.status === 'partially_received') && (
-            <Button onClick={handleReceive} variant="secondary">Receive</Button>
+            <Button onClick={handleReceive} variant="secondary" loading={isRunning}>{isRunning ? 'Receiving...' : 'Receive'}</Button>
           )}
           {!isNew && order.status !== 'fully_received' && order.status !== 'cancelled' && (
-            <Button onClick={() => run(() => cancelPurchaseOrder(order.id))} variant="ghost" className="text-red-600">Cancel</Button>
+            <Button onClick={() => run(() => cancelPurchaseOrder(order.id))} variant="ghost" className="text-red-600" loading={isRunning}>Cancel</Button>
           )}
         </>
       }
@@ -186,6 +190,7 @@ export function PurchaseOrderForm() {
           <Input
             label="Due Date"
             type="date"
+            min={new Date().toISOString().slice(0, 10)}
             value={order.dueDate ? order.dueDate.slice(0, 10) : ''}
             onChange={(e) => setOrder({ ...order, dueDate: e.target.value || null })}
             disabled={isLocked}

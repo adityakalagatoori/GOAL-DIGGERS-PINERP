@@ -13,12 +13,14 @@ export function SignalForm() {
   const navigate = useNavigate();
   const [signal, setSignal] = useState({ sourceType: '', category: '', signalType: '', severity: 'medium', description: '' });
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     if (!signal.sourceType || !signal.signalType || !signal.description) {
       setError('Source Type, Signal Type, and Description are required.');
       return;
     }
+    setIsSaving(true);
     try {
       await createSignal({
         sourceType: signal.sourceType,
@@ -30,11 +32,12 @@ export function SignalForm() {
       navigate('/signals');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Save failed');
+      setIsSaving(false);
     }
   };
 
   return (
-    <FormView title="Report Market Signal" onBack={() => navigate('/signals')} actions={<Button onClick={handleSave}>Save</Button>}>
+    <FormView title="Report Market Signal" onBack={() => navigate('/signals')} actions={<Button onClick={handleSave} loading={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>}>
       <div className="p-6 space-y-6">
         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 rounded-lg">{error}</div>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

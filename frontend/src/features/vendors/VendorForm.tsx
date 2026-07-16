@@ -15,6 +15,7 @@ export function VendorForm() {
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [performance, setPerformance] = useState<VendorPerformance | null>(null);
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!isNew) {
@@ -28,17 +29,19 @@ export function VendorForm() {
   if (!vendor) return <div>Loading...</div>;
 
   const handleSave = async () => {
+    setIsSaving(true);
     try {
       if (isNew) await createVendor({ name: vendor.name, address: vendor.address ?? undefined, contact: vendor.contact ?? undefined });
       else await updateVendor(vendor.id, { name: vendor.name, address: vendor.address ?? undefined, contact: vendor.contact ?? undefined });
       navigate('/vendors');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Save failed');
+      setIsSaving(false);
     }
   };
 
   return (
-    <FormView title={isNew ? 'New Vendor' : 'Vendor Profile'} reference={!isNew ? vendor.reference : undefined} onBack={() => navigate('/vendors')} actions={<Button onClick={handleSave}>Save</Button>}>
+    <FormView title={isNew ? 'New Vendor' : 'Vendor Profile'} reference={!isNew ? vendor.reference : undefined} onBack={() => navigate('/vendors')} actions={<Button onClick={handleSave} loading={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>}>
       <div className="p-6 space-y-6">
         {error && <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 rounded-lg">{error}</div>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
