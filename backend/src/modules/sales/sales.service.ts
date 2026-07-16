@@ -81,10 +81,10 @@ export async function listSalesOrders(filters: ListFilters) {
   });
 }
 
-export async function getSalesOrder(id: number, userId?: number) {
+export async function getSalesOrder(id: number, userId?: number, isAdmin?: boolean) {
   const so = await prisma.salesOrder.findUnique({ where: { id }, include: includeAll });
   if (!so) throw new AppError(404, "Sales order not found");
-  if (userId && so.createdBy !== userId) throw new AppError(403, "You do not have access to this sales order");
+  if (userId && !isAdmin && so.createdBy !== userId) throw new AppError(403, "You do not have access to this sales order");
 
   // `includeAll`'s nested `product: true` is a raw Prisma fetch — it has no
   // freeToUseQty (that's only computed by products.service's withComputedQty).
@@ -155,13 +155,13 @@ export async function createSalesOrder(data: CreateInput, userId?: number) {
   return so;
 }
 
-export async function updateSalesOrder(id: number, data: Partial<CreateInput>, userId?: number) {
+export async function updateSalesOrder(id: number, data: Partial<CreateInput>, userId?: number, isAdmin?: boolean) {
   const existing = await prisma.salesOrder.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, "Sales order not found");
   if (existing.status !== "draft") {
     throw new AppError(400, "Only a Draft sales order can be edited");
   }
-  if (userId && existing.createdBy !== userId) {
+  if (userId && !isAdmin && existing.createdBy !== userId) {
     throw new AppError(403, "Only the order creator can edit this sales order");
   }
 
@@ -190,10 +190,10 @@ export async function updateSalesOrder(id: number, data: Partial<CreateInput>, u
   }, { timeout: 20000 });
 }
 
-export async function deleteSalesOrder(id: number, userId?: number) {
+export async function deleteSalesOrder(id: number, userId?: number, isAdmin?: boolean) {
   const existing = await prisma.salesOrder.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, "Sales order not found");
-  if (userId && existing.createdBy !== userId) {
+  if (userId && !isAdmin && existing.createdBy !== userId) {
     throw new AppError(403, "Only the order creator can delete this sales order");
   }
   await prisma.salesOrder.delete({ where: { id } });

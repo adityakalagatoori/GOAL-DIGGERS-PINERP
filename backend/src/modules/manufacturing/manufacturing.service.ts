@@ -87,10 +87,10 @@ export async function listManufacturingOrders(filters: ListFilters) {
   });
 }
 
-export async function getManufacturingOrder(id: number, userId?: number) {
+export async function getManufacturingOrder(id: number, userId?: number, isAdmin?: boolean) {
   const mo = await prisma.manufacturingOrder.findUnique({ where: { id }, include: includeAll });
   if (!mo) throw new AppError(404, "Manufacturing order not found");
-  if (userId && mo.createdBy !== userId) throw new AppError(403, "You do not have access to this manufacturing order");
+  if (userId && !isAdmin && mo.createdBy !== userId) throw new AppError(403, "You do not have access to this manufacturing order");
   return mo;
 }
 
@@ -150,13 +150,13 @@ export async function createManufacturingOrder(data: CreateInput, userId?: numbe
   return mo;
 }
 
-export async function updateManufacturingOrder(id: number, data: Partial<CreateInput>, userId?: number) {
+export async function updateManufacturingOrder(id: number, data: Partial<CreateInput>, userId?: number, isAdmin?: boolean) {
   const existing = await prisma.manufacturingOrder.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, "Manufacturing order not found");
   if (existing.status !== "draft") {
     throw new AppError(400, "Only a Draft manufacturing order can be edited");
   }
-  if (userId && existing.createdBy !== userId) {
+  if (userId && !isAdmin && existing.createdBy !== userId) {
     throw new AppError(403, "Only the order creator can edit this manufacturing order");
   }
   const { bomId, finishedProductId, ...rest } = data as any;
@@ -167,10 +167,10 @@ export async function updateManufacturingOrder(id: number, data: Partial<CreateI
   return mo;
 }
 
-export async function deleteManufacturingOrder(id: number, userId?: number) {
+export async function deleteManufacturingOrder(id: number, userId?: number, isAdmin?: boolean) {
   const existing = await prisma.manufacturingOrder.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, "Manufacturing order not found");
-  if (userId && existing.createdBy !== userId) {
+  if (userId && !isAdmin && existing.createdBy !== userId) {
     throw new AppError(403, "Only the order creator can delete this manufacturing order");
   }
   await prisma.manufacturingOrder.delete({ where: { id } });

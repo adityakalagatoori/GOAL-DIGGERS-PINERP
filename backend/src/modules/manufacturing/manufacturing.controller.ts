@@ -16,7 +16,7 @@ export async function listManufacturingOrdersHandler(req: Request, res: Response
 }
 
 export async function getManufacturingOrderHandler(req: Request, res: Response) {
-  res.json(await mfgService.getManufacturingOrder(Number(req.params.id), req.user?.userId));
+  res.json(await mfgService.getManufacturingOrder(Number(req.params.id), req.user?.userId, req.user?.isAdmin));
 }
 
 export async function createManufacturingOrderHandler(req: Request, res: Response) {
@@ -24,11 +24,11 @@ export async function createManufacturingOrderHandler(req: Request, res: Respons
 }
 
 export async function updateManufacturingOrderHandler(req: Request, res: Response) {
-  res.json(await mfgService.updateManufacturingOrder(Number(req.params.id), req.body, req.user!.userId));
+  res.json(await mfgService.updateManufacturingOrder(Number(req.params.id), req.body, req.user!.userId, req.user!.isAdmin));
 }
 
 export async function deleteManufacturingOrderHandler(req: Request, res: Response) {
-  await mfgService.deleteManufacturingOrder(Number(req.params.id), req.user!.userId);
+  await mfgService.deleteManufacturingOrder(Number(req.params.id), req.user!.userId, req.user!.isAdmin);
   res.status(204).send();
 }
 

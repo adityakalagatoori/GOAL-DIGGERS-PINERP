@@ -25,7 +25,7 @@ export async function listPurchaseOrdersHandler(req: Request, res: Response) {
 }
 
 export async function getPurchaseOrderHandler(req: Request, res: Response) {
-  res.json(await purchaseService.getPurchaseOrder(Number(req.params.id), req.user?.userId));
+  res.json(await purchaseService.getPurchaseOrder(Number(req.params.id), req.user?.userId, req.user?.isAdmin));
 }
 
 export async function createPurchaseOrderHandler(req: Request, res: Response) {
@@ -35,11 +35,11 @@ export async function createPurchaseOrderHandler(req: Request, res: Response) {
 
 export async function updatePurchaseOrderHandler(req: Request, res: Response) {
   const data = await filterByFieldPermission(req.user!.userId, req.user!.isAdmin, PermissionModule.purchase, "canEdit", req.body, PURCHASE_FIELD_MAP);
-  res.json(await purchaseService.updatePurchaseOrder(Number(req.params.id), { ...data, lines: req.body.lines } as any, req.user!.userId));
+  res.json(await purchaseService.updatePurchaseOrder(Number(req.params.id), { ...data, lines: req.body.lines } as any, req.user!.userId, req.user!.isAdmin));
 }
 
 export async function deletePurchaseOrderHandler(req: Request, res: Response) {
-  await purchaseService.deletePurchaseOrder(Number(req.params.id), req.user!.userId);
+  await purchaseService.deletePurchaseOrder(Number(req.params.id), req.user!.userId, req.user!.isAdmin);
   res.status(204).send();
 }
 

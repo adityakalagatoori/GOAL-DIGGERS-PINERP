@@ -25,7 +25,7 @@ export async function listSalesOrdersHandler(req: Request, res: Response) {
 }
 
 export async function getSalesOrderHandler(req: Request, res: Response) {
-  res.json(await salesService.getSalesOrder(Number(req.params.id), req.user?.userId));
+  res.json(await salesService.getSalesOrder(Number(req.params.id), req.user?.userId, req.user?.isAdmin));
 }
 
 export async function createSalesOrderHandler(req: Request, res: Response) {
@@ -36,11 +36,11 @@ export async function createSalesOrderHandler(req: Request, res: Response) {
 
 export async function updateSalesOrderHandler(req: Request, res: Response) {
   const data = await filterByFieldPermission(req.user!.userId, req.user!.isAdmin, PermissionModule.sales, "canEdit", req.body, SALES_FIELD_MAP);
-  res.json(await salesService.updateSalesOrder(Number(req.params.id), { ...data, lines: req.body.lines } as any, req.user!.userId));
+  res.json(await salesService.updateSalesOrder(Number(req.params.id), { ...data, lines: req.body.lines } as any, req.user!.userId, req.user!.isAdmin));
 }
 
 export async function deleteSalesOrderHandler(req: Request, res: Response) {
-  await salesService.deleteSalesOrder(Number(req.params.id), req.user!.userId);
+  await salesService.deleteSalesOrder(Number(req.params.id), req.user!.userId, req.user!.isAdmin);
   res.status(204).send();
 }
 

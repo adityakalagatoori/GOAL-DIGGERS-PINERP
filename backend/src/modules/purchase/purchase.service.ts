@@ -71,10 +71,10 @@ export async function listPurchaseOrders(filters: ListFilters) {
   });
 }
 
-export async function getPurchaseOrder(id: number, userId?: number) {
+export async function getPurchaseOrder(id: number, userId?: number, isAdmin?: boolean) {
   const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: includeAll });
   if (!po) throw new AppError(404, "Purchase order not found");
-  if (userId && po.createdBy !== userId) throw new AppError(403, "You do not have access to this purchase order");
+  if (userId && !isAdmin && po.createdBy !== userId) throw new AppError(403, "You do not have access to this purchase order");
   return po;
 }
 
@@ -134,13 +134,13 @@ export async function createPurchaseOrder(data: CreateInput, userId?: number) {
   return po;
 }
 
-export async function updatePurchaseOrder(id: number, data: Partial<CreateInput>, userId?: number) {
+export async function updatePurchaseOrder(id: number, data: Partial<CreateInput>, userId?: number, isAdmin?: boolean) {
   const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, "Purchase order not found");
   if (existing.status !== "draft") {
     throw new AppError(400, "Only a Draft purchase order can be edited");
   }
-  if (userId && existing.createdBy !== userId) {
+  if (userId && !isAdmin && existing.createdBy !== userId) {
     throw new AppError(403, "Only the order creator can edit this purchase order");
   }
 
@@ -169,10 +169,10 @@ export async function updatePurchaseOrder(id: number, data: Partial<CreateInput>
   }, { timeout: 20000 });
 }
 
-export async function deletePurchaseOrder(id: number, userId?: number) {
+export async function deletePurchaseOrder(id: number, userId?: number, isAdmin?: boolean) {
   const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, "Purchase order not found");
-  if (userId && existing.createdBy !== userId) {
+  if (userId && !isAdmin && existing.createdBy !== userId) {
     throw new AppError(403, "Only the order creator can delete this purchase order");
   }
   await prisma.purchaseOrder.delete({ where: { id } });
