@@ -26,10 +26,15 @@ export function ManufacturingOrderList() {
   const [orders, setOrders] = useState<ManufacturingOrder[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ManufacturingOrderStatus | ''>('');
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<ManufacturingOrderStatus | ''>((searchParams.get('status') as ManufacturingOrderStatus | null) ?? '');
   const [scheduleDateFrom, setScheduleDateFrom] = useState('');
   const [scheduleDateTo, setScheduleDateTo] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setStatusFilter((searchParams.get('status') as ManufacturingOrderStatus | null) ?? '');
+  }, [searchParams]);
 
   const refresh = () =>
     listManufacturingOrders({

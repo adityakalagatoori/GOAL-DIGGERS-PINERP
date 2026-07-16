@@ -26,10 +26,15 @@ export function SalesOrderList() {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<SalesOrderStatus | ''>('');
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<SalesOrderStatus | ''>((searchParams.get('status') as SalesOrderStatus | null) ?? '');
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setStatusFilter((searchParams.get('status') as SalesOrderStatus | null) ?? '');
+  }, [searchParams]);
 
   const refresh = () =>
     listSalesOrders({

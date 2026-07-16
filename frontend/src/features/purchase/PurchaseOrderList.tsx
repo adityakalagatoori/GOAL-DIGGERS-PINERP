@@ -23,10 +23,15 @@ export function PurchaseOrderList() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | ''>('');
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | ''>((searchParams.get('status') as PurchaseOrderStatus | null) ?? '');
   const [dueDateFrom, setDueDateFrom] = useState('');
   const [dueDateTo, setDueDateTo] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setStatusFilter((searchParams.get('status') as PurchaseOrderStatus | null) ?? '');
+  }, [searchParams]);
 
   const refresh = () =>
     listPurchaseOrders({
