@@ -298,9 +298,10 @@ export function Insights() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-foreground/60 mb-4">
-              Autonomous multi-step agent: detects understocked products, scores every candidate vendor on a weighted
-              price / speed / reliability model computed from live vendor offers and real quality-incident history,
-              then recommends (and can execute) the optimal purchase.
+              Autonomous multi-step agent: detects understocked products (by reorder threshold OR an active Market
+              Signal report, even if stock is technically still above threshold), scores every candidate vendor on a
+              weighted price / speed / reliability model computed from live vendor offers and real quality-incident
+              history, then recommends (and can execute) the optimal purchase.
             </p>
 
             <div className="mb-5 p-4 bg-secondary rounded-xl space-y-3">
@@ -347,6 +348,7 @@ export function Insights() {
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{rec.productName}</span>
                             <Badge variant="warning">{rec.onHandQty} on hand / {rec.reorderThreshold} threshold</Badge>
+                            {rec.triggeredBySignal && <Badge variant="info">📡 Flagged by Market Signal</Badge>}
                           </div>
                           {rec.recommendedVendor && (
                             <button

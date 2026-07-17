@@ -55,6 +55,7 @@ export interface ProcurementRecommendation {
   candidates: VendorScore[];
   recommendedVendor: VendorScore | null;
   reasoning: string;
+  triggeredBySignal: boolean;
 }
 
 export interface OptimizationRun {

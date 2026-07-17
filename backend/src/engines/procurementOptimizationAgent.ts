@@ -52,6 +52,7 @@ interface ProductRecommendation {
   candidates: VendorScore[];
   recommendedVendor: VendorScore | null;
   reasoning: string;
+  triggeredBySignal: boolean;
 }
 
 export interface OptimizationRun {
@@ -73,14 +74,37 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
     detail: `Using weights — price: ${(WEIGHTS.price * 100).toFixed(0)}%, speed: ${(WEIGHTS.speed * 100).toFixed(0)}%, reliability: ${(WEIGHTS.reliability * 100).toFixed(0)}%.`,
   });
 
-  // STEP 1 — PERCEIVE: find products below their reorder threshold
-  const products = await prisma.product.findMany({
-    where: { lowStockThreshold: { not: null } },
+  // STEP 1 — PERCEIVE: two independent triggers feed the same pipeline —
+  //   (a) numeric shortage: onHandQty below the configured reorder threshold
+  //   (b) field intelligence: an active (non-expired) shortage/availability
+  //       Market Signal reported against a product, even if its on-hand
+  //       count technically still clears the threshold — a human on the
+  //       ground flagging a problem is itself a valid reason to evaluate
+  //       a purchase, not something the agent should ignore just because
+  //       a number hasn't crossed a line yet.
+  // Fetch ALL products, not just ones with a threshold set — a Market
+  // Signal can flag a product that has no numeric threshold configured at
+  // all (e.g. Glass Panel), and that product must still be reachable here.
+  const allProducts = await prisma.product.findMany();
+  const withThreshold = allProducts.filter((p) => p.lowStockThreshold !== null);
+  const belowThreshold = withThreshold.filter((p) => Number(p.onHandQty) < Number(p.lowStockThreshold));
+
+  const activeSignals = await prisma.marketSignal.findMany({
+    where: {
+      productId: { not: null },
+      signalType: { in: ["shortage", "availability"] },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
   });
-  const shortProducts = products.filter((p) => Number(p.onHandQty) < Number(p.lowStockThreshold));
+  const signaledProductIds = new Set(activeSignals.map((s) => s.productId));
+  const signaledProducts = allProducts.filter((p) => signaledProductIds.has(p.id) && !belowThreshold.some((bp) => bp.id === p.id));
+
+  const shortProducts = [...belowThreshold, ...signaledProducts];
   steps.push({
     step: "perceive",
-    detail: `Scanned ${products.length} products with a reorder threshold set. Found ${shortProducts.length} below threshold.`,
+    detail:
+      `Scanned ${withThreshold.length} products with a reorder threshold set (${belowThreshold.length} below it), and ${activeSignals.length} active Market Signal(s)` +
+      (signaledProducts.length > 0 ? ` — ${signaledProducts.length} additional product(s) flagged by field intelligence despite being above their numeric threshold.` : "."),
   });
 
   if (shortProducts.length === 0) {
@@ -90,22 +114,33 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
   const recommendations: ProductRecommendation[] = [];
 
   for (const product of shortProducts) {
+    const triggeredBySignal = !belowThreshold.some((bp) => bp.id === product.id);
+    const effectiveThreshold = product.lowStockThreshold ? Number(product.lowStockThreshold) : Number(product.onHandQty);
     // STEP 2 — GATHER: live vendor offers + real incident history
     const offers = await prisma.vendorOffer.findMany({
       where: { productId: product.id },
       include: { vendor: true },
     });
 
+    // A signal-triggered product may already be at/above its numeric
+    // threshold — there's no real "shortfall" to compute a purchase qty
+    // from, so fall back to a precautionary top-up (minOrderQty if the
+    // product defines one, otherwise the threshold itself).
+    const signalShortfall = Number(product.minOrderQty ?? product.lowStockThreshold ?? 10);
+    const numericShortfall = effectiveThreshold - Number(product.onHandQty);
+    const shortfallQty = triggeredBySignal && numericShortfall <= 0 ? signalShortfall : numericShortfall;
+
     if (offers.length === 0) {
       recommendations.push({
         productId: product.id,
         productName: product.name,
         onHandQty: Number(product.onHandQty),
-        reorderThreshold: Number(product.lowStockThreshold),
-        shortfall: Number(product.lowStockThreshold) - Number(product.onHandQty),
+        reorderThreshold: effectiveThreshold,
+        shortfall: shortfallQty,
         candidates: [],
         recommendedVendor: null,
         reasoning: "No vendor offers exist for this product — cannot recommend a purchase.",
+        triggeredBySignal,
       });
       continue;
     }
@@ -151,25 +186,27 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
 
     candidates.sort((a, b) => b.totalScore - a.totalScore);
     const winner = candidates[0];
-    const shortfall = Number(product.lowStockThreshold) - Number(product.onHandQty);
 
+    const signalPrefix = triggeredBySignal ? `Field intelligence flagged this product (Market Signal) even though it's still above its reorder threshold. ` : "";
     const reasoning =
-      candidates.length === 1
+      signalPrefix +
+      (candidates.length === 1
         ? `Only one vendor (${winner.vendorName}) offers this product — selected by default at ₹${winner.unitPrice}/unit, ${winner.leadTimeDays}-day lead time.`
         : `${winner.vendorName} scored highest (${winner.totalScore}/1.0) among ${candidates.length} vendors — ` +
           `₹${winner.unitPrice}/unit (price score ${winner.priceScore}), ${winner.leadTimeDays}-day lead time (speed score ${winner.speedScore}), ` +
           `${winner.incidentCount} quality incidents on record (reliability score ${winner.reliabilityScore}). ` +
-          `Runner-up: ${candidates[1].vendorName} at ${candidates[1].totalScore}/1.0.`;
+          `Runner-up: ${candidates[1].vendorName} at ${candidates[1].totalScore}/1.0.`);
 
     recommendations.push({
       productId: product.id,
       productName: product.name,
       onHandQty: Number(product.onHandQty),
-      reorderThreshold: Number(product.lowStockThreshold),
-      shortfall,
+      reorderThreshold: effectiveThreshold,
+      shortfall: shortfallQty,
       candidates,
       recommendedVendor: winner,
       reasoning,
+      triggeredBySignal,
     });
   }
 
