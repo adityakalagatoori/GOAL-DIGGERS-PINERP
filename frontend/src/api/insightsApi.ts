@@ -7,6 +7,7 @@ export interface ForecastResult {
   insufficientData: boolean;
   insight?: string;
   model: { slope: number; intercept: number; rSquared: number; trend: string; confidence: string } | null;
+  mlPrediction: number | null;
 }
 
 export interface ParetoResult {
@@ -78,7 +79,12 @@ export function applyOptimizationRecommendation(productId: number, weights?: Opt
   return apiFetch(`/api/insights/optimize-procurement/${productId}/apply`, { method: 'POST', body: { weights } });
 }
 
+export interface SingleProductOptimizationRun {
+  steps: { step: string; detail: string }[];
+  recommendation: ProcurementRecommendation;
+}
+
 export function getVendorComparisonForProduct(productId: number, weights?: OptimizationWeights) {
   const qs = weights ? `?priceWeight=${weights.price}&speedWeight=${weights.speed}&reliabilityWeight=${weights.reliability}` : '';
-  return apiFetch<ProcurementRecommendation>(`/api/insights/vendor-comparison/${productId}${qs}`);
+  return apiFetch<SingleProductOptimizationRun>(`/api/insights/vendor-comparison/${productId}${qs}`);
 }

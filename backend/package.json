@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
     "seed": "tsx src/prisma/seed.ts",
+    "train:ml": "tsx src/ml/trainDemandModel.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

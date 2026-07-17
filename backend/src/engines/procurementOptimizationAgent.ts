@@ -229,38 +229,65 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
   return { steps, recommendations };
 }
 
+export interface SingleProductOptimizationRun {
+  steps: { step: string; detail: string }[];
+  recommendation: ProductRecommendation;
+}
+
 /**
- * Manual lookup: score every vendor for ANY chosen product, regardless of
+ * Manual lookup: score every vendor for ONE chosen product, regardless of
  * whether it's currently short — lets a user pick "Screws" or "Frame
  * Clips" from a dropdown and see the same vendor comparison the automatic
  * agent would produce if that product ever went short, without waiting
- * for a real shortage.
+ * for a real shortage. Runs the identical PERCEIVE/GATHER/SCORE/DECIDE
+ * pipeline as the full-catalog scan, just scoped to one product instead
+ * of scanning everything.
  */
-export async function getVendorComparisonForProduct(productId: number, customWeights?: Partial<OptimizationWeights>): Promise<ProductRecommendation> {
+export async function getVendorComparisonForProduct(productId: number, customWeights?: Partial<OptimizationWeights>): Promise<SingleProductOptimizationRun> {
   const WEIGHTS = normalizeWeights(customWeights);
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) throw new AppError(404, "Product not found");
+
+  const steps: SingleProductOptimizationRun["steps"] = [
+    { step: "configure", detail: `Using weights — price: ${(WEIGHTS.price * 100).toFixed(0)}%, speed: ${(WEIGHTS.speed * 100).toFixed(0)}%, reliability: ${(WEIGHTS.reliability * 100).toFixed(0)}%.` },
+    { step: "perceive", detail: `Target locked to "${product.name}" only — on hand: ${Number(product.onHandQty)}, reorder threshold: ${product.lowStockThreshold ?? "not set"}.` },
+  ];
 
   const { candidates, winner, reasoning } = await scoreVendorsForProduct(product, WEIGHTS);
   const effectiveThreshold = product.lowStockThreshold ? Number(product.lowStockThreshold) : Number(product.onHandQty);
   const shortfall = Math.max(0, effectiveThreshold - Number(product.onHandQty));
 
+  steps.push({
+    step: "gather_and_score",
+    detail:
+      candidates.length > 0
+        ? `Pulled ${candidates.length} live vendor offer(s) and quality-incident history, scored each on the weighted price/speed/reliability model.`
+        : `No vendor offers exist for "${product.name}" — nothing to score.`,
+  });
+  steps.push({
+    step: "decide",
+    detail: winner ? `Selected ${winner.vendorName} as the highest-scoring vendor.` : "No recommendation possible — add a vendor offer for this product first.",
+  });
+
   return {
-    productId: product.id,
-    productName: product.name,
-    onHandQty: Number(product.onHandQty),
-    reorderThreshold: effectiveThreshold,
-    shortfall: shortfall || Number(product.minOrderQty ?? 10),
-    candidates,
-    recommendedVendor: winner,
-    reasoning,
-    triggeredBySignal: false,
+    steps,
+    recommendation: {
+      productId: product.id,
+      productName: product.name,
+      onHandQty: Number(product.onHandQty),
+      reorderThreshold: effectiveThreshold,
+      shortfall: shortfall || Number(product.minOrderQty ?? 10),
+      candidates,
+      recommendedVendor: winner,
+      reasoning,
+      triggeredBySignal: false,
+    },
   };
 }
 
 /** Executes the agent's recommendation for one product — actually creates the PO, not just a suggestion. */
 export async function applyOptimizationRecommendation(productId: number, userId: number, customWeights?: Partial<OptimizationWeights>) {
-  const rec = await getVendorComparisonForProduct(productId, customWeights);
+  const { recommendation: rec } = await getVendorComparisonForProduct(productId, customWeights);
   if (!rec.recommendedVendor) {
     throw new Error("No recommendation available for this product");
   }

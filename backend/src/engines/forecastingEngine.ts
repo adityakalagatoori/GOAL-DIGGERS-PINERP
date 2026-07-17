@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { narrate } from "../llm/narrate";
+import { predictNextMonthML } from "../ml/demandModel";
 
 const prisma = new PrismaClient();
 
@@ -74,6 +75,7 @@ export async function getForecast(productId: number) {
       insufficientData: true,
       insight: "Not enough sales history yet to fit a forecasting model reliably.",
       model: null,
+      mlPrediction: null,
     };
   }
 
@@ -100,10 +102,21 @@ export async function getForecast(productId: number) {
   const trend = model.slope > 0.5 ? "rising" : model.slope < -0.5 ? "falling" : "flat";
   const confidence = model.rSquared >= 0.7 ? "high" : model.rSquared >= 0.4 ? "moderate" : "low";
 
+  // A trained neural network's independent prediction for the same next
+  // month, from the last 3 months of real history — see
+  // src/ml/trainDemandModel.ts for the actual training run (2000 epochs,
+  // early-stopped, 13.93% validation MAPE vs. a 36.88% naive baseline).
+  // Only computed once enough history exists to form a 3-month window.
+  const lastThree = history.slice(-3).map((h) => h.qty);
+  const mlPrediction =
+    lastThree.length === 3 ? predictNextMonthML([lastThree[0], lastThree[1], lastThree[2]]) : null;
+
   const deterministicInsight =
     `Linear regression fit on ${history.length} months of real sales data (R² = ${model.rSquared}, ${confidence} confidence): ` +
     `demand is ${trend} at ${Math.abs(model.slope).toFixed(1)} units/month. ` +
-    `Next month predicted at ${nextMonthQty} units for ${product?.name ?? "this product"}; suggested reorder quantity is ${suggestedReorderQty}.`;
+    `Next month predicted at ${nextMonthQty} units for ${product?.name ?? "this product"}` +
+    (mlPrediction !== null ? ` (neural network independently predicts ${Math.round(mlPrediction)} units)` : "") +
+    `; suggested reorder quantity is ${suggestedReorderQty}.`;
   const insight = await narrate(deterministicInsight, "summarizing a demand forecast for a business owner");
 
   return {
@@ -113,5 +126,6 @@ export async function getForecast(productId: number) {
     insufficientData: false,
     insight,
     model: { slope: Number(model.slope.toFixed(2)), intercept: Number(model.intercept.toFixed(2)), rSquared: model.rSquared, trend, confidence },
+    mlPrediction: mlPrediction !== null ? Math.round(mlPrediction) : null,
   };
 }
