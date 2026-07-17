@@ -77,3 +77,8 @@ export function runProcurementOptimization(weights?: OptimizationWeights) {
 export function applyOptimizationRecommendation(productId: number, weights?: OptimizationWeights) {
   return apiFetch(`/api/insights/optimize-procurement/${productId}/apply`, { method: 'POST', body: { weights } });
 }
+
+export function getVendorComparisonForProduct(productId: number, weights?: OptimizationWeights) {
+  const qs = weights ? `?priceWeight=${weights.price}&speedWeight=${weights.speed}&reliabilityWeight=${weights.reliability}` : '';
+  return apiFetch<ProcurementRecommendation>(`/api/insights/vendor-comparison/${productId}${qs}`);
+}

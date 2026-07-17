@@ -1,4 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Product } from "@prisma/client";
+import { AppError } from "../middleware/errorHandler";
 
 const prisma = new PrismaClient();
 
@@ -10,6 +11,7 @@ const prisma = new PrismaClient();
  * default vendor" rule:
  *
  *   1. PERCEIVE  — detect which products are below their reorder threshold
+ *                  (or flagged by an active Market Signal)
  *   2. GATHER    — pull every vendor's live offer for that product (price,
  *                  lead time) plus that vendor's real quality-incident
  *                  history from the audit trail
@@ -31,7 +33,7 @@ export interface OptimizationWeights {
   reliability: number;
 }
 
-interface VendorScore {
+export interface VendorScore {
   vendorId: number;
   vendorName: string;
   unitPrice: number;
@@ -43,7 +45,7 @@ interface VendorScore {
   totalScore: number;
 }
 
-interface ProductRecommendation {
+export interface ProductRecommendation {
   productId: number;
   productName: string;
   onHandQty: number;
@@ -60,13 +62,86 @@ export interface OptimizationRun {
   recommendations: ProductRecommendation[];
 }
 
-export async function runProcurementOptimization(customWeights?: Partial<OptimizationWeights>): Promise<OptimizationRun> {
-  // Normalize so caller-supplied weights (e.g. from UI sliders) always sum
-  // to 1 even if the three inputs don't add up cleanly — the scoring math
-  // assumes a normalized weight vector.
+function normalizeWeights(customWeights?: Partial<OptimizationWeights>): OptimizationWeights {
   const raw = { ...DEFAULT_WEIGHTS, ...customWeights };
   const sum = raw.price + raw.speed + raw.reliability;
-  const WEIGHTS = sum > 0 ? { price: raw.price / sum, speed: raw.speed / sum, reliability: raw.reliability / sum } : DEFAULT_WEIGHTS;
+  return sum > 0 ? { price: raw.price / sum, speed: raw.speed / sum, reliability: raw.reliability / sum } : DEFAULT_WEIGHTS;
+}
+
+/**
+ * The shared GATHER + SCORE step — given one product and a normalized
+ * weight vector, pulls every vendor's live offer plus their real
+ * quality-incident history and returns a ranked, fully-scored candidate
+ * list. Used both by the automatic shortage scan below AND by the manual
+ * "pick any product" lookup, so a user manually checking Screws sees the
+ * exact same math as the agent's own automatic recommendations.
+ */
+async function scoreVendorsForProduct(
+  product: Product,
+  weights: OptimizationWeights
+): Promise<{ candidates: VendorScore[]; reasoning: string; winner: VendorScore | null }> {
+  const offers = await prisma.vendorOffer.findMany({
+    where: { productId: product.id },
+    include: { vendor: true },
+  });
+
+  if (offers.length === 0) {
+    return { candidates: [], winner: null, reasoning: "No vendor offers exist for this product — cannot recommend a purchase." };
+  }
+
+  const incidentCounts = await Promise.all(
+    offers.map((o) => prisma.vendorQualityIncident.count({ where: { vendorId: o.vendorId } }))
+  );
+
+  const prices = offers.map((o) => Number(o.unitPrice));
+  const leadTimes = offers.map((o) => o.leadTimeDays);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const minLead = Math.min(...leadTimes);
+  const maxLead = Math.max(...leadTimes);
+  const maxIncidents = Math.max(...incidentCounts, 1);
+
+  const candidates: VendorScore[] = offers.map((offer, i) => {
+    const price = Number(offer.unitPrice);
+    const leadTimeDays = offer.leadTimeDays;
+    const incidentCount = incidentCounts[i];
+
+    // Lower price/lead-time/incidents is better — invert so higher score = better.
+    const priceScore = maxPrice === minPrice ? 1 : 1 - (price - minPrice) / (maxPrice - minPrice);
+    const speedScore = maxLead === minLead ? 1 : 1 - (leadTimeDays - minLead) / (maxLead - minLead);
+    const reliabilityScore = 1 - incidentCount / maxIncidents;
+
+    const totalScore = priceScore * weights.price + speedScore * weights.speed + reliabilityScore * weights.reliability;
+
+    return {
+      vendorId: offer.vendorId,
+      vendorName: offer.vendor.name,
+      unitPrice: price,
+      leadTimeDays,
+      incidentCount,
+      priceScore: Number(priceScore.toFixed(3)),
+      speedScore: Number(speedScore.toFixed(3)),
+      reliabilityScore: Number(reliabilityScore.toFixed(3)),
+      totalScore: Number(totalScore.toFixed(3)),
+    };
+  });
+
+  candidates.sort((a, b) => b.totalScore - a.totalScore);
+  const winner = candidates[0];
+
+  const reasoning =
+    candidates.length === 1
+      ? `Only one vendor (${winner.vendorName}) offers this product — selected by default at ₹${winner.unitPrice}/unit, ${winner.leadTimeDays}-day lead time.`
+      : `${winner.vendorName} scored highest (${winner.totalScore}/1.0) among ${candidates.length} vendors — ` +
+        `₹${winner.unitPrice}/unit (price score ${winner.priceScore}), ${winner.leadTimeDays}-day lead time (speed score ${winner.speedScore}), ` +
+        `${winner.incidentCount} quality incidents on record (reliability score ${winner.reliabilityScore}). ` +
+        `Runner-up: ${candidates[1].vendorName} at ${candidates[1].totalScore}/1.0.`;
+
+  return { candidates, winner, reasoning };
+}
+
+export async function runProcurementOptimization(customWeights?: Partial<OptimizationWeights>): Promise<OptimizationRun> {
+  const WEIGHTS = normalizeWeights(customWeights);
 
   const steps: OptimizationRun["steps"] = [];
   steps.push({
@@ -84,7 +159,7 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
   //       a number hasn't crossed a line yet.
   // Fetch ALL products, not just ones with a threshold set — a Market
   // Signal can flag a product that has no numeric threshold configured at
-  // all (e.g. Glass Panel), and that product must still be reachable here.
+  // all, and that product must still be reachable here.
   const allProducts = await prisma.product.findMany();
   const withThreshold = allProducts.filter((p) => p.lowStockThreshold !== null);
   const belowThreshold = withThreshold.filter((p) => Number(p.onHandQty) < Number(p.lowStockThreshold));
@@ -116,11 +191,6 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
   for (const product of shortProducts) {
     const triggeredBySignal = !belowThreshold.some((bp) => bp.id === product.id);
     const effectiveThreshold = product.lowStockThreshold ? Number(product.lowStockThreshold) : Number(product.onHandQty);
-    // STEP 2 — GATHER: live vendor offers + real incident history
-    const offers = await prisma.vendorOffer.findMany({
-      where: { productId: product.id },
-      include: { vendor: true },
-    });
 
     // A signal-triggered product may already be at/above its numeric
     // threshold — there's no real "shortfall" to compute a purchase qty
@@ -130,72 +200,9 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
     const numericShortfall = effectiveThreshold - Number(product.onHandQty);
     const shortfallQty = triggeredBySignal && numericShortfall <= 0 ? signalShortfall : numericShortfall;
 
-    if (offers.length === 0) {
-      recommendations.push({
-        productId: product.id,
-        productName: product.name,
-        onHandQty: Number(product.onHandQty),
-        reorderThreshold: effectiveThreshold,
-        shortfall: shortfallQty,
-        candidates: [],
-        recommendedVendor: null,
-        reasoning: "No vendor offers exist for this product — cannot recommend a purchase.",
-        triggeredBySignal,
-      });
-      continue;
-    }
-
-    const incidentCounts = await Promise.all(
-      offers.map((o) => prisma.vendorQualityIncident.count({ where: { vendorId: o.vendorId } }))
-    );
-
-    // STEP 3 — SCORE: normalize each criterion to 0-1, weight, and sum
-    const prices = offers.map((o) => Number(o.unitPrice));
-    const leadTimes = offers.map((o) => o.leadTimeDays);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const minLead = Math.min(...leadTimes);
-    const maxLead = Math.max(...leadTimes);
-    const maxIncidents = Math.max(...incidentCounts, 1);
-
-    const candidates: VendorScore[] = offers.map((offer, i) => {
-      const price = Number(offer.unitPrice);
-      const leadTimeDays = offer.leadTimeDays;
-      const incidentCount = incidentCounts[i];
-
-      // Lower price/lead-time/incidents is better — invert so higher score = better.
-      const priceScore = maxPrice === minPrice ? 1 : 1 - (price - minPrice) / (maxPrice - minPrice);
-      const speedScore = maxLead === minLead ? 1 : 1 - (leadTimeDays - minLead) / (maxLead - minLead);
-      const reliabilityScore = 1 - incidentCount / maxIncidents;
-
-      const totalScore =
-        priceScore * WEIGHTS.price + speedScore * WEIGHTS.speed + reliabilityScore * WEIGHTS.reliability;
-
-      return {
-        vendorId: offer.vendorId,
-        vendorName: offer.vendor.name,
-        unitPrice: price,
-        leadTimeDays,
-        incidentCount,
-        priceScore: Number(priceScore.toFixed(3)),
-        speedScore: Number(speedScore.toFixed(3)),
-        reliabilityScore: Number(reliabilityScore.toFixed(3)),
-        totalScore: Number(totalScore.toFixed(3)),
-      };
-    });
-
-    candidates.sort((a, b) => b.totalScore - a.totalScore);
-    const winner = candidates[0];
+    const { candidates, winner, reasoning } = await scoreVendorsForProduct(product, WEIGHTS);
 
     const signalPrefix = triggeredBySignal ? `Field intelligence flagged this product (Market Signal) even though it's still above its reorder threshold. ` : "";
-    const reasoning =
-      signalPrefix +
-      (candidates.length === 1
-        ? `Only one vendor (${winner.vendorName}) offers this product — selected by default at ₹${winner.unitPrice}/unit, ${winner.leadTimeDays}-day lead time.`
-        : `${winner.vendorName} scored highest (${winner.totalScore}/1.0) among ${candidates.length} vendors — ` +
-          `₹${winner.unitPrice}/unit (price score ${winner.priceScore}), ${winner.leadTimeDays}-day lead time (speed score ${winner.speedScore}), ` +
-          `${winner.incidentCount} quality incidents on record (reliability score ${winner.reliabilityScore}). ` +
-          `Runner-up: ${candidates[1].vendorName} at ${candidates[1].totalScore}/1.0.`);
 
     recommendations.push({
       productId: product.id,
@@ -205,7 +212,7 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
       shortfall: shortfallQty,
       candidates,
       recommendedVendor: winner,
-      reasoning,
+      reasoning: signalPrefix + reasoning,
       triggeredBySignal,
     });
   }
@@ -222,11 +229,39 @@ export async function runProcurementOptimization(customWeights?: Partial<Optimiz
   return { steps, recommendations };
 }
 
+/**
+ * Manual lookup: score every vendor for ANY chosen product, regardless of
+ * whether it's currently short — lets a user pick "Screws" or "Frame
+ * Clips" from a dropdown and see the same vendor comparison the automatic
+ * agent would produce if that product ever went short, without waiting
+ * for a real shortage.
+ */
+export async function getVendorComparisonForProduct(productId: number, customWeights?: Partial<OptimizationWeights>): Promise<ProductRecommendation> {
+  const WEIGHTS = normalizeWeights(customWeights);
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) throw new AppError(404, "Product not found");
+
+  const { candidates, winner, reasoning } = await scoreVendorsForProduct(product, WEIGHTS);
+  const effectiveThreshold = product.lowStockThreshold ? Number(product.lowStockThreshold) : Number(product.onHandQty);
+  const shortfall = Math.max(0, effectiveThreshold - Number(product.onHandQty));
+
+  return {
+    productId: product.id,
+    productName: product.name,
+    onHandQty: Number(product.onHandQty),
+    reorderThreshold: effectiveThreshold,
+    shortfall: shortfall || Number(product.minOrderQty ?? 10),
+    candidates,
+    recommendedVendor: winner,
+    reasoning,
+    triggeredBySignal: false,
+  };
+}
+
 /** Executes the agent's recommendation for one product — actually creates the PO, not just a suggestion. */
 export async function applyOptimizationRecommendation(productId: number, userId: number, customWeights?: Partial<OptimizationWeights>) {
-  const run = await runProcurementOptimization(customWeights);
-  const rec = run.recommendations.find((r) => r.productId === productId);
-  if (!rec || !rec.recommendedVendor) {
+  const rec = await getVendorComparisonForProduct(productId, customWeights);
+  if (!rec.recommendedVendor) {
     throw new Error("No recommendation available for this product");
   }
 

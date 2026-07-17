@@ -3,7 +3,7 @@ import { authMiddleware } from "../../middleware/auth.middleware";
 import { getForecast } from "../../engines/forecastingEngine";
 import { getParetoAnalysis } from "../../engines/paretoEngine";
 import { getBatchPurchaseSuggestions } from "../../engines/batchPurchaseOptimizer";
-import { runProcurementOptimization, applyOptimizationRecommendation } from "../../engines/procurementOptimizationAgent";
+import { runProcurementOptimization, applyOptimizationRecommendation, getVendorComparisonForProduct } from "../../engines/procurementOptimizationAgent";
 
 // Read-only analytics — any authenticated user can view Insights (it never
 // writes anything), so no per-field grid entry is needed for this module.
@@ -24,6 +24,17 @@ insightsRouter.get("/optimize-procurement", async (req, res) => {
 insightsRouter.post("/optimize-procurement/:productId/apply", async (req, res) =>
   res.json(await applyOptimizationRecommendation(Number(req.params.productId), req.user!.userId, req.body?.weights))
 );
+
+// Manual lookup — compare vendors for ANY product the user picks, not just
+// ones currently short. Same scoring math as the automatic scan.
+insightsRouter.get("/vendor-comparison/:productId", async (req, res) => {
+  const { priceWeight, speedWeight, reliabilityWeight } = req.query;
+  const weights =
+    priceWeight || speedWeight || reliabilityWeight
+      ? { price: Number(priceWeight) || 0, speed: Number(speedWeight) || 0, reliability: Number(reliabilityWeight) || 0 }
+      : undefined;
+  res.json(await getVendorComparisonForProduct(Number(req.params.productId), weights));
+});
 
 // TEMPORARY one-off seeding trigger for the optimization agent's vendor
 // offers/quality-incident demo data — admin-only, safe to call repeatedly

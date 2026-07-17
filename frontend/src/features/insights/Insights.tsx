@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Badge } from '../../components/ui/Badge';
 import type { Product } from '../../types';
 import { listProducts } from '../../api/productApi';
-import { getForecast, getParetoAnalysis, getBatchPurchaseSuggestions, runProcurementOptimization, applyOptimizationRecommendation, type ForecastResult, type ParetoResult, type BatchPurchaseSuggestion, type OptimizationRun, type OptimizationWeights } from '../../api/insightsApi';
+import { getForecast, getParetoAnalysis, getBatchPurchaseSuggestions, runProcurementOptimization, applyOptimizationRecommendation, getVendorComparisonForProduct, type ForecastResult, type ParetoResult, type BatchPurchaseSuggestion, type OptimizationRun, type OptimizationWeights, type ProcurementRecommendation } from '../../api/insightsApi';
 
 /** Mirrors backend's fitLinearRegression (forecastingEngine.ts) exactly, so
  * the What-If simulator can fit instantly client-side as the user types —
@@ -35,6 +35,9 @@ export function Insights() {
   const [optimizing, setOptimizing] = useState(false);
   const [applyingId, setApplyingId] = useState<number | null>(null);
   const [weights, setWeights] = useState<OptimizationWeights>({ price: 0.4, speed: 0.35, reliability: 0.25 });
+  const [pickedProductId, setPickedProductId] = useState<number | ''>('');
+  const [pickedComparison, setPickedComparison] = useState<ProcurementRecommendation | null>(null);
+  const [pickingLoading, setPickingLoading] = useState(false);
 
   const [simData, setSimData] = useState<number[]>([80, 85, 78, 92, 88, 95]);
 
@@ -81,6 +84,20 @@ export function Insights() {
     const next = { ...weights, [key]: value };
     setWeights(next);
     if (optimization) runOptimizer(next);
+    if (pickedComparison) fetchComparison(pickedProductId, next);
+  };
+
+  const fetchComparison = async (productId: number | '', w: OptimizationWeights = weights) => {
+    if (!productId) { setPickedComparison(null); return; }
+    setPickingLoading(true);
+    try {
+      const result = await getVendorComparisonForProduct(Number(productId), w);
+      setPickedComparison(result);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPickingLoading(false);
+    }
   };
 
   // Live client-side fit — recomputes on every keystroke, no network call,
@@ -321,6 +338,62 @@ export function Insights() {
                   <span className="w-12 text-sm text-right font-mono">{(weights[key] * 100).toFixed(0)}%</span>
                 </div>
               ))}
+            </div>
+
+            <div className="mb-5 p-4 border border-border rounded-xl space-y-3">
+              <p className="text-xs font-medium text-foreground/60 uppercase tracking-wide">Or check vendors for a specific product/component</p>
+              <select
+                className="w-full border border-border rounded px-3 py-2 text-sm"
+                value={pickedProductId}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : '';
+                  setPickedProductId(id);
+                  fetchComparison(id);
+                }}
+              >
+                <option value="">Select a product...</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+
+              {pickingLoading && <p className="text-sm text-foreground/60 text-center py-2">Comparing vendors...</p>}
+
+              {pickedComparison && !pickingLoading && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-medium">{pickedComparison.productName}</span>
+                    <Badge variant="default">{pickedComparison.onHandQty} on hand</Badge>
+                  </div>
+                  <p className="text-sm text-foreground/70 mb-3">{pickedComparison.reasoning}</p>
+                  {pickedComparison.candidates.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-foreground/50 text-left">
+                            <th className="pb-1 pr-4">Vendor</th>
+                            <th className="pb-1 pr-4">Price</th>
+                            <th className="pb-1 pr-4">Lead Time</th>
+                            <th className="pb-1 pr-4">Incidents</th>
+                            <th className="pb-1 pr-4">Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pickedComparison.candidates.map((c) => (
+                            <tr key={c.vendorId} className={c.vendorId === pickedComparison.recommendedVendor?.vendorId ? 'font-semibold text-primary' : ''}>
+                              <td className="py-1 pr-4">{c.vendorName}</td>
+                              <td className="py-1 pr-4">₹{c.unitPrice}</td>
+                              <td className="py-1 pr-4">{c.leadTimeDays}d</td>
+                              <td className="py-1 pr-4">{c.incidentCount}</td>
+                              <td className="py-1 pr-4">{c.totalScore}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-foreground/60">No vendor offers exist for this product yet.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {!optimization && !optimizing && (
