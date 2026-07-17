@@ -24,3 +24,14 @@ insightsRouter.get("/optimize-procurement", async (req, res) => {
 insightsRouter.post("/optimize-procurement/:productId/apply", async (req, res) =>
   res.json(await applyOptimizationRecommendation(Number(req.params.productId), req.user!.userId, req.body?.weights))
 );
+
+// TEMPORARY one-off seeding trigger for the optimization agent's vendor
+// offers/quality-incident demo data — admin-only, safe to call repeatedly
+// (skipDuplicates on offers; incidents are cheap sample rows). Remove after
+// production has been seeded once.
+insightsRouter.post("/seed-optimization-demo-data", async (req, res) => {
+  if (!req.user!.isAdmin) return res.status(403).json({ error: "Admin only" });
+  const { seedOptimizationDemoData } = await import("../../prisma/addOptimizationSeedData");
+  await seedOptimizationDemoData();
+  res.json({ ok: true });
+});

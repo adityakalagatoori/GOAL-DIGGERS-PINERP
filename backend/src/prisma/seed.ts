@@ -786,8 +786,34 @@ async function main() {
       // Glass Panel: current vendor (Mayfair) has NO expedite option on file — EXPEDITE should not appear for it.
       { vendorId: mayfair.id, productId: glassPanel.id, unitPrice: 4, leadTimeDays: 5, expediteAvailable: false },
       { vendorId: woodCo.id, productId: glassPanel.id, unitPrice: 3.6, leadTimeDays: 8 },
+      // Door Frames, Lighting Frame, Dining Chair: all three vendors quoting, so the
+      // Procurement Optimization Agent has a real multi-vendor comparison for every
+      // below-threshold product, not just Wooden Legs.
+      { vendorId: mayfair.id, productId: doorFrames.id, unitPrice: 8.5, leadTimeDays: 6 },
+      { vendorId: woodCo.id, productId: doorFrames.id, unitPrice: 7.8, leadTimeDays: 11 },
+      { vendorId: oma.id, productId: doorFrames.id, unitPrice: 9.2, leadTimeDays: 4 },
+      { vendorId: mayfair.id, productId: lightingFrame.id, unitPrice: 3.2, leadTimeDays: 5 },
+      { vendorId: oma.id, productId: lightingFrame.id, unitPrice: 2.9, leadTimeDays: 9 },
+      { vendorId: woodCo.id, productId: diningChair.id, unitPrice: 9.5, leadTimeDays: 8 },
+      { vendorId: mayfair.id, productId: diningChair.id, unitPrice: 10.2, leadTimeDays: 5 },
+      { vendorId: oma.id, productId: diningChair.id, unitPrice: 8.9, leadTimeDays: 12 },
     ],
     skipDuplicates: true,
+  });
+
+  // ---------- Vendor Quality Incidents (drives the Reliability score in the
+  // Procurement Optimization Agent — without these every vendor ties at a
+  // perfect reliability score, which makes the Reliability slider a no-op) ----------
+  await prisma.vendorQualityIncident.createMany({
+    data: [
+      { vendorId: oma.id, description: "Shipment of Dining Chair components arrived 4 days late without prior notice.", severity: Severity.high },
+      { vendorId: oma.id, description: "Two Lighting Frame units received with visible surface scratches.", severity: Severity.medium },
+      { vendorId: oma.id, description: "Invoice quantity mismatched delivered quantity by 3 units.", severity: Severity.low },
+      { vendorId: woodCo.id, description: "Door Frames batch failed dimensional tolerance check on arrival.", severity: Severity.medium },
+      { vendorId: woodCo.id, description: "Delivery truck missed the scheduled dock slot, causing a half-day production delay.", severity: Severity.low },
+      // Mayfair intentionally has zero incidents on record — the clean-reliability
+      // baseline the other two vendors are compared against.
+    ],
   });
 
   // ---------- PIN: Market Signals seeded to exercise every branch of the confidence formula and recommendation engine ----------
