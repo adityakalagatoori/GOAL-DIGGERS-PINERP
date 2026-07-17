@@ -210,7 +210,11 @@ export async function applyOptimizationRecommendation(productId: number, userId:
       recordRef: po.reference,
       action: "created",
       fieldChanged: "AI Optimization Agent",
-      newValue: rec.reasoning,
+      // AuditLog.newValue is a plain VARCHAR(191) — the full reasoning
+      // (still returned in full in the API response) is truncated here so
+      // a verbose multi-vendor comparison sentence can't overflow the
+      // column and fail the whole PO creation with a P2000.
+      newValue: rec.reasoning.length > 191 ? rec.reasoning.slice(0, 188) + "..." : rec.reasoning,
       userId,
     },
   });

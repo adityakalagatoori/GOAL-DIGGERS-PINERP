@@ -171,10 +171,11 @@ export function Insights() {
                   <label className="text-xs text-foreground/50 mb-1">M{i + 1}</label>
                   <input
                     type="number"
+                    min={0}
                     value={qty}
                     onChange={(e) => {
                       const next = [...simData];
-                      next[i] = Number(e.target.value) || 0;
+                      next[i] = Math.max(0, Number(e.target.value) || 0);
                       setSimData(next);
                     }}
                     className="w-16 border border-border rounded px-2 py-1 text-sm text-center"
