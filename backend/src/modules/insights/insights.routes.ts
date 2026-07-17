@@ -4,6 +4,7 @@ import { getForecast } from "../../engines/forecastingEngine";
 import { getParetoAnalysis } from "../../engines/paretoEngine";
 import { getBatchPurchaseSuggestions } from "../../engines/batchPurchaseOptimizer";
 import { runProcurementOptimization, applyOptimizationRecommendation, getVendorComparisonForProduct } from "../../engines/procurementOptimizationAgent";
+import { predictNextMonthML } from "../../ml/demandModel";
 
 // Read-only analytics — any authenticated user can view Insights (it never
 // writes anything), so no per-field grid entry is needed for this module.
@@ -34,6 +35,18 @@ insightsRouter.get("/vendor-comparison/:productId", async (req, res) => {
       ? { price: Number(priceWeight) || 0, speed: Number(speedWeight) || 0, reliability: Number(reliabilityWeight) || 0 }
       : undefined;
   res.json(await getVendorComparisonForProduct(Number(req.params.productId), weights));
+});
+
+// Live inference against the trained neural network for ANY 3 numbers the
+// caller supplies — powers the What-If Simulator's ML side so the network
+// visibly responds to arbitrary user input, not just the seeded dataset.
+insightsRouter.post("/ml-predict", async (req, res) => {
+  const { m1, m2, m3 } = req.body;
+  if (typeof m1 !== "number" || typeof m2 !== "number" || typeof m3 !== "number") {
+    return res.status(400).json({ error: "m1, m2, m3 must be numbers" });
+  }
+  const prediction = predictNextMonthML([m1, m2, m3]);
+  res.json({ prediction: prediction !== null ? Math.round(prediction) : null });
 });
 
 // TEMPORARY one-off seeding trigger for the optimization agent's vendor

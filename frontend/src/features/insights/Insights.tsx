@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Badge } from '../../components/ui/Badge';
 import type { Product } from '../../types';
 import { listProducts } from '../../api/productApi';
-import { getForecast, getParetoAnalysis, getBatchPurchaseSuggestions, applyOptimizationRecommendation, getVendorComparisonForProduct, type ForecastResult, type ParetoResult, type BatchPurchaseSuggestion, type OptimizationWeights, type SingleProductOptimizationRun } from '../../api/insightsApi';
+import { getForecast, getParetoAnalysis, getBatchPurchaseSuggestions, applyOptimizationRecommendation, getVendorComparisonForProduct, getMlPrediction, type ForecastResult, type ParetoResult, type BatchPurchaseSuggestion, type OptimizationWeights, type SingleProductOptimizationRun } from '../../api/insightsApi';
 
 /** Mirrors backend's fitLinearRegression (forecastingEngine.ts) exactly, so
  * the What-If simulator can fit instantly client-side as the user types —
@@ -38,6 +38,8 @@ export function Insights() {
   const [optimizationResult, setOptimizationResult] = useState<SingleProductOptimizationRun | null>(null);
 
   const [simData, setSimData] = useState<number[]>([80, 85, 78, 92, 88, 95]);
+  const [simMlPrediction, setSimMlPrediction] = useState<number | null>(null);
+  const [simMlLoading, setSimMlLoading] = useState(false);
 
   useEffect(() => {
     listProducts().then((p) => {
@@ -95,6 +97,24 @@ export function Insights() {
     ...simData.map((qty, i) => ({ period: `M${i + 1}`, qty })),
     ...(simForecastNext !== null ? [{ period: `M${simData.length + 1}`, qty: simForecastNext, projected: true }] : []),
   ];
+
+  // Live server call to the TRAINED neural network — debounced so it fires
+  // ~400ms after the user stops typing, not on every single keystroke. This
+  // is what makes the ML model (not just the regression formula) visibly
+  // respond to arbitrary user input instead of only ever running on the
+  // seeded dataset.
+  useEffect(() => {
+    if (simData.length < 3) { setSimMlPrediction(null); return; }
+    const last3 = simData.slice(-3) as [number, number, number];
+    setSimMlLoading(true);
+    const debounce = setTimeout(() => {
+      getMlPrediction(last3[0], last3[1], last3[2])
+        .then((r) => setSimMlPrediction(r.prediction))
+        .catch(() => setSimMlPrediction(null))
+        .finally(() => setSimMlLoading(false));
+    }, 400);
+    return () => clearTimeout(debounce);
+  }, [simData]);
 
   return (
     <div className="space-y-6">
@@ -236,6 +256,21 @@ export function Insights() {
             )}
             <p className="mt-3 text-xs text-foreground/50 font-mono">
               y = {simModel?.slope ?? 0}x + {simModel?.intercept ?? 0} — fit live via least-squares on the {simData.length} points above
+            </p>
+
+            <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-500/10 rounded-lg border border-purple-100 dark:border-purple-500/20 flex justify-between items-center">
+              <div>
+                <span className="text-sm font-medium text-purple-900 dark:text-purple-300">🧠 Trained Neural Network</span>
+                <p className="text-xs text-purple-700/70 dark:text-purple-400/70 mt-0.5">
+                  Real server call to the trained model, using only your last 3 typed values ({simData.slice(-3).join(', ')})
+                </p>
+              </div>
+              <span className="text-sm font-semibold text-purple-800 dark:text-purple-400">
+                {simMlLoading ? '...' : simMlPrediction !== null ? `${simMlPrediction} units` : '—'}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-foreground/50">
+              Notice this often disagrees with the regression above — two independently trained models, same input, different reasoning.
             </p>
           </CardContent>
         </Card>

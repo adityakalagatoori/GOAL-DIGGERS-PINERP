@@ -88,3 +88,7 @@ export function getVendorComparisonForProduct(productId: number, weights?: Optim
   const qs = weights ? `?priceWeight=${weights.price}&speedWeight=${weights.speed}&reliabilityWeight=${weights.reliability}` : '';
   return apiFetch<SingleProductOptimizationRun>(`/api/insights/vendor-comparison/${productId}${qs}`);
 }
+
+export function getMlPrediction(m1: number, m2: number, m3: number) {
+  return apiFetch<{ prediction: number | null }>('/api/insights/ml-predict', { method: 'POST', body: { m1, m2, m3 } });
+}
