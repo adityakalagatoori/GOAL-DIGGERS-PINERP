@@ -124,7 +124,7 @@ export function Insights() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Demand Forecasting</CardTitle>
           </CardHeader>
